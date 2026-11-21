@@ -275,20 +275,19 @@ mark[data-cs]{cursor:pointer}
 .dd.warn{background:var(--urgent-soft);color:var(--urgent)}
 /* 일정 목록의 서류 마감 아이콘도 달력과 같은 파랑 */
 .kind.k-due{background:var(--st-sub-soft);color:var(--st-sub)}
-/* 자소서 문항: 수정·빼기 · + 문항 추가 (2026-11-22) */
-.q .q-h{display:flex;align-items:flex-start;gap:10px;margin:0}
-.q .q-h .grow{flex:1;min-width:0}
-.q-acts{display:inline-flex;gap:12px;flex-shrink:0;white-space:nowrap;padding-top:3px}
-.q-acts .link-btn{color:var(--muted)}
-.q-acts .link-btn:hover{color:var(--accent)}
-.q-acts [data-act="q-rm"]:hover{color:var(--urgent)}
-.q-rm{margin:2px 0 4px}
+/* 자소서 문항: [수정] 모드 · + 문항 추가 (2026-11-22) */
+.q-hbtn{margin-left:auto;display:inline-flex;gap:6px}
 .q-add-btn{width:100%;min-height:44px;padding:10px;border:1.5px dashed var(--line);border-radius:10px;background:transparent;color:var(--muted);font:inherit;font-size:14px;font-weight:600;cursor:pointer}
 .q-add-btn:hover,.q-add-btn:focus-visible{border-color:var(--accent);color:var(--accent);outline:none}
-.qnew{border-color:var(--accent);border-style:solid}
-.qnew .li{display:flex;align-items:flex-start;gap:8px;padding:8px 2px;border-bottom:1px dashed var(--line);font-size:14px}
-.qnew .li .grow{flex:1;min-width:0}
-.qe .qr .mini-sel{width:auto}
+.qnew,.q-mode{border-color:var(--accent)}
 .qe .qr{flex-wrap:wrap;white-space:nowrap}
-.qe .qr .hint{white-space:normal;flex-basis:100%}
-.q .qe{border-color:var(--accent)}
+.qe .qr .mini-sel{width:auto}
+.q-foot{display:flex;justify-content:flex-end;border-top:1px dashed var(--line);padding-top:6px;margin-top:2px}
+.del-btn{color:var(--urgent)!important}
+.q-del{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 10px;background:var(--urgent-soft);border-color:transparent;opacity:.9}
+.q-del>span:first-child{text-decoration:line-through;color:var(--muted)}
+.q-del .link-btn{margin-left:auto}
+.q-check{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:8px;background:var(--urgent-soft);color:var(--urgent);font-weight:700;font-size:14px}
+.q-check span{font-weight:400;font-size:12.5px}
+.qn-item{display:flex;flex-direction:column;gap:6px;padding:8px 0;border-bottom:1px dashed var(--line)}
+.q-warn{color:var(--urgent);font-size:12px;white-space:normal}

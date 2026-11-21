@@ -726,7 +726,7 @@ function extractRun_(input, email, key, st) {
     '- applyStart: 접수 시작일 "YYYY-MM-DD" (없으면 "")\n' +
     '- steps: 전형 순서 (예: ["서류","인적성","1차 면접","최종 면접"])\n' +
     '- events: 공고에 날짜가 나온 전형 일정만 (k: apt=인적성·AI역량, int=면접, ann=결과 발표, etc=기타). 서류 마감은 넣지 않음\n' +
-    '- qs: 자기소개서 문항을 **원문 그대로** (요약·수정 금지). 단 맨 앞 번호("1.", "문항 1", "Q1" 등)와 글자 수 표시("(500자 이상, 1000자 이하)", "(1,000자)" 등)는 t에서 빼고, n에 최대 글자 수만 (최소는 버림, 없으면 0). u는 글자 수가 바이트(byte) 기준이면 "byte", 글자 기준이면 ""\n' +
+    '- qs: 자기소개서 문항을 **원문 그대로** (요약·수정 금지), n은 글자 수 제한 (없으면 0)\n' +
     '- memo: "고용형태 · 근무지 · 주요 업무 · 전형 · 우대 · 마감 시각" 순서로 한 줄 요약 (가운뎃점으로 구분, 공고에 있는 것만)\n' +
     '- short: 휴대폰 달력의 좁은 칸에 쓸 회사 줄임말. 한글 2~4자 또는 영문 약자 2~5자로 널리 쓰는 이름 (예: SK네트웍스서비스→SKNS, 고영테크놀러지→고영, 한국투자증권→한투)\n' +
     (input.text ? '\n[붙여넣은 공고 본문]\n' + String(input.text).slice(0, 60000) + '\n' : '') +
@@ -746,7 +746,7 @@ function extractRun_(input, email, key, st) {
       steps: { type: 'array', items: { type: 'string' } },
       events: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['d','k','t'],
         properties: { d: { type: 'string' }, k: { type: 'string', enum: ['apt','int','ann','etc'] }, t: { type: 'string' } } } },
-      qs: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['t','n','u'], properties: { t: { type: 'string' }, n: { type: 'integer' }, u: { type: 'string', enum: ['', 'byte'] } } } },
+      qs: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['t','n'], properties: { t: { type: 'string' }, n: { type: 'integer' } } } },
       memo: { type: 'string' },
       positions: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['role','job','loc','career','note'],
         properties: { role: { type: 'string' }, job: { type: 'string' }, loc: { type: 'string' }, career: { type: 'string' }, note: { type: 'string' } } } }
