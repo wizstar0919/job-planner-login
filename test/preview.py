@@ -2,7 +2,7 @@
 #   python test/preview.py                 → preview.html (저장소 맨 위, .gitignore 대상)
 #   브라우저 주소 뒤에 붙일 수 있는 것 (여러 개는 & 로):
 #     v=home|cal|board|list|rec   화면      m=list|month|week  달력 보기 방식
-#     open=1 첫 공고 상세 열기    add=1 공고 추가 창    menu=1 계정 메뉴    light=1 / dark=1 밝은·어두운 화면
+#     open=1 첫 공고 상세 열기 (open=p1 처럼 공고 id 도 됨)    add=1 공고 추가 창    menu=1 계정 메뉴    set=1 설정 창    light=1 / dark=1 밝은·어두운 화면
 #     who=gh  공유받은 플래너(댓글 허용) 보기
 import sys
 import json, datetime, random, os
@@ -58,9 +58,10 @@ addEventListener('load',function(){setTimeout(function(){
   if(q.get('who')){c('#profBtn');c('[data-act="view"][data-v="'+q.get('who')+'"]')}
   if(q.get('v'))c('[data-act="nav"][data-v="'+q.get('v')+'"]');
   if(q.get('m'))c('[data-act="cal-mode"][data-v="'+q.get('m')+'"]');
-  if(q.get('open'))c('[data-act="open"]');
+  if(q.get('open'))c(q.get('open')==='1'?'[data-act="open"]':'[data-act="open"][data-id="'+q.get('open')+'"]');
   if(q.get('add'))c('[data-act="add"]');
   if(q.get('menu'))c('#profBtn');
+  if(q.get('set'))c('[data-act="settings"]');
 },400)});
 })();
 </script>""" % json.dumps(load, ensure_ascii=False)

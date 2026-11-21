@@ -62,7 +62,7 @@ const GOOGLE_CLIENT_ID='405546328317-siu1ah5girrbl1o2us9rtls4eafpn8eh.apps.googl
 const DEFAULT_SERVER='https://script.google.com/macros/s/AKfycbxpOGnj0TBYyWTAGF3CcUr-0ozCYzf6fIAUO87M5jZ-R2T9gB-10v3gAQ7_90mrlRoG/exec';
 /* 앱과 같은 로그인 정보를 씀 (같은 주소라 앱에서 로그인했으면 바로 들어옴) */
 const LS={get(k,d){try{const v=localStorage.getItem('jpl_'+k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('jpl_'+k,JSON.stringify(v))}catch(e){}}};
-const cfg=Object.assign({server:'',sess:'',email:''},LS.get('cfg',{}));if(!cfg.server)cfg.server=DEFAULT_SERVER;
+const cfg=Object.assign({server:'',sess:'',email:''},LS.get('cfg',{}));cfg.server=DEFAULT_SERVER;/* 서버 주소 고정: 저장소에 다른 주소가 있어도 무시 */
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const root=document.getElementById('root');
 let D=null,view='load',err='',busy='';
@@ -71,7 +71,7 @@ const ERR={network:'인터넷 연결을 확인해 주세요',auth:'다시 로그
 const msg=e=>ERR[e&&e.code]||('문제가 생겼어요 ('+((e&&e.code)||'알 수 없음')+')');
 function toast(m){const o=document.querySelector('.toast');if(o)o.remove();const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
 async function api(action,body){
-  let res;try{res=await fetch(cfg.server,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({sess:cfg.sess,action},body||{}))})}catch(e){throw {code:'network'}}
+  let res;try{res=await fetch(DEFAULT_SERVER,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({sess:cfg.sess,action},body||{}))})}catch(e){throw {code:'network'}}
   let j;try{j=await res.json()}catch(e){throw {code:'bad_response'}}
   if(!j.ok)throw {code:j.error||'error'};return j}
 

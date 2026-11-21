@@ -32,11 +32,13 @@ const WD=['일','월','화','수','목','금','토'];
 const dt=s=>new Date(String(s).slice(0,10)+'T00:00:00');
 const addDays=(s,n)=>{const d=dt(s);d.setDate(d.getDate()+n);return iso(d)};
 const diff=s=>Math.round((dt(s)-T0)/864e5);
-const md=s=>{if(!s)return '';const d=dt(s);if(isNaN(d))return s;return (d.getMonth()+1)+'/'+d.getDate()+'('+WD[d.getDay()]+')'};
+const md=s=>{if(!s)return '';const d=dt(s);if(isNaN(d))return esc(s);/* 날짜가 아니면 글자로만 (코드가 끼어들지 않게) */return (d.getMonth()+1)+'/'+d.getDate()+'('+WD[d.getDay()]+')'};
 const ddL=n=>n===0?'D-day':n>0?'D-'+n:'D+'+(-n);
 const ddC=n=>n<=1?'urgent':n<=3?'warn':'';
 const okUrl=u=>/^https?:\/\/[^\s]+$/i.test(String(u||'').trim()); /* javascript: 같은 주소는 링크로 걸지 않음 */
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* 시트에서 온 id 에 따옴표·꺾쇠 같은 글자가 있으면 바꿔 둠 (화면 속성에 넣을 때 코드가 끼어들지 않게) */
+const sid=x=>String(x??'').replace(/[\s"'<>&`=\\]/g,'_').slice(0,100);
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const KIND={due:['📝','서류 마감'],sub:['📤','제출'],apt:['🧠','인적성·AI역량'],int:['🎤','면접'],ann:['📢','결과 발표'],etc:['•','기타']};
 const COLS=[['관심','시작 전','--st-start'],['작성중','작성 중','--st-write'],['제출','제출','--st-sub'],['인적성','인적성·필기','--st-test'],['면접1','1차 면접','--st-int'],['면접2','2차 면접','--st-int'],['면접3','3차 면접','--st-int'],['종료','종료','--st-end']];
@@ -75,11 +77,8 @@ const VIEWS=[['cal','달력','cal'],['home','홈','home'],['board','보드','boa
 /* 기기 저장 이름표 jpl_ : 같은 주소(github.io)의 지금 쓰는 앱(jp_)과 섞이지 않게 */
 const LS={get(k,d){try{const v=localStorage.getItem('jpl_'+k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('jpl_'+k,JSON.stringify(v))}catch(e){}},del(k){try{localStorage.removeItem('jpl_'+k)}catch(e){}}};
 const cfg=Object.assign({server:'',sess:'',email:''},LS.get('cfg',{}));
-if(!cfg.server&&!/^__/.test(DEFAULT_SERVER))cfg.server=DEFAULT_SERVER;
-(function(){/* 시험용: 링크의 #s= 로 다른 서버 주소를 줄 수 있음 */
-  const m=location.hash.match(/(?:^#|&)s=([^&]+)/)||location.search.match(/[?&]s=([^&]+)/);
-  if(m){try{cfg.server=decodeURIComponent(m[1]);LS.set('cfg',cfg)}catch(e){}}
-})();
+/* 서버 주소는 코드에 고정. 링크·기기 저장소로 바꿀 수 없음 (로그인 정보가 다른 곳으로 가지 않게). 예전에 저장된 다른 주소도 여기서 덮어씀 */
+cfg.server=DEFAULT_SERVER;LS.set('cfg',cfg);
 const saveCfg=()=>LS.set('cfg',cfg);
 
 /* ================= 데이터 ================= */
@@ -90,20 +89,20 @@ let loaded=false,usage=Object.assign({used:0,limit:30,hasKey:null},LS.get('usage
 const Y=b=>b?'Y':'';
 function build(w,t){
   const P0=emptyPerson(w);if(!t)return P0;
-  const posts=(t.posts||[]).map(r=>({id:r.id,co:r.co||'',job:r.job||'',role:r.role||'',type:r.type||'',ind:r.ind||'',loc:r.loc||'',link:r.link||'',relLink:r.relLink||'',
+  const posts=(t.posts||[]).map(r=>({id:sid(r.id),co:r.co||'',job:r.job||'',role:r.role||'',type:r.type||'',ind:r.ind||'',loc:r.loc||'',link:r.link||'',relLink:r.relLink||'',
     short:r.short||'',applyStart:r.applyStart||'',dueKind:r.dueKind||'미확인',due:r.due||null,recheck:r.recheck||'',stage:r.stage||'관심',result:r.result||'',failAt:r.failAt||'',submitted:r.submitted||'',
     steps:(r.steps||'서류').split('>').map(s=>s.trim()).filter(Boolean),cur:+r.cur||0,memo:r.memo||'',src:r.src||'',created:r.created||'',updated:r.updated||'',qs:[],tasks:[],events:[],hist:[],comments:[]}));
   const by=Object.fromEntries(posts.map(p=>[p.id,p]));
-  (t.qs||[]).slice().sort((a,b)=>(+a.i)-(+b.i)).forEach(r=>{const p=by[r.pid];if(p)p.qs.push({id:r.id,t:r.t||'',n:+r.n||0,a:r.a||'',st:r.st||'미작성',lock:r.lock==='Y',ver:r.ver||''})});
-  (t.events||[]).forEach(r=>{const p=by[r.pid];if(p)p.events.push({id:r.id,d:r.d,k:r.k||'etc',t:r.t||''})});
-  (t.tasks||[]).forEach(r=>{const o={id:r.id,t:r.t||'',due:r.due||'',done:r.done==='Y',doneAt:r.doneAt||'',auto:r.auto==='Y'};if(r.pid&&by[r.pid])by[r.pid].tasks.push(o);else P0.tasks.push(o)});
-  (t.hist||[]).forEach(r=>{const p=by[r.pid];if(p)p.hist.push({id:r.id,d:r.d,t:r.t})});
-  (t.comments||[]).forEach(r=>{const p=by[r.pid];if(!p)return;let rep=[];try{rep=JSON.parse(r.replies||'[]')}catch(e){}
-    p.comments.push({id:r.id,qi:r.qi===''?-1:+r.qi,quote:r.quote||'',text:r.text||'',by:r.by||'',at:r.at||'',replies:rep,resolved:r.resolved==='Y',read:r.read==='Y',ver:r.ver||''})});
+  (t.qs||[]).slice().sort((a,b)=>(+a.i)-(+b.i)).forEach(r=>{const p=by[sid(r.pid)];if(p)p.qs.push({id:sid(r.id),t:r.t||'',n:+r.n||0,a:r.a||'',st:QST.includes(r.st)?r.st:(r.a?'초안':'미작성'),lock:r.lock==='Y',ver:r.ver||''})});
+  (t.events||[]).forEach(r=>{const p=by[sid(r.pid)];if(p)p.events.push({id:sid(r.id),d:r.d,k:KIND[r.k]?r.k:'etc',t:r.t||''})});
+  (t.tasks||[]).forEach(r=>{const o={id:sid(r.id),t:r.t||'',due:r.due||'',done:r.done==='Y',doneAt:r.doneAt||'',auto:r.auto==='Y'};if(r.pid&&by[sid(r.pid)])by[sid(r.pid)].tasks.push(o);else P0.tasks.push(o)});
+  (t.hist||[]).forEach(r=>{const p=by[sid(r.pid)];if(p)p.hist.push({id:sid(r.id),d:r.d,t:r.t})});
+  (t.comments||[]).forEach(r=>{const p=by[sid(r.pid)];if(!p)return;let rep=[];try{rep=JSON.parse(r.replies||'[]')}catch(e){}if(!Array.isArray(rep))rep=[];rep=rep.filter(x=>x&&typeof x==='object').map(x=>({id:x.id?sid(x.id):'',text:String(x.text??''),by:String(x.by??''),at:String(x.at??'')}));
+    p.comments.push({id:sid(r.id),qi:/^\d{1,3}$/.test(r.qi)?+r.qi:-1,quote:r.quote||'',text:r.text||'',by:r.by||'',at:r.at||'',replies:rep,resolved:r.resolved==='Y',read:r.read==='Y',ver:r.ver||''})});
   posts.forEach(p=>{if(p.stage==='전형'||!COLNAME[p.stage])p.stage=p.stage==='전형'?stageOfStep(p.steps[p.cur]):'관심'});
   posts.forEach(p=>{p.hist.sort((a,b)=>String(a.d).localeCompare(String(b.d)));if(!p.hist.length)p.hist=[{id:uid(),d:p.created||TODAY,t:'등록'}]});
   (t.settings||[]).forEach(r=>{try{if(r.k==='jobs')P0.jobs=JSON.parse(r.v);if(r.k==='inds')P0.inds=JSON.parse(r.v);if(r.k==='auto')P0.auto=Object.assign({...DEFAULT_AUTO},JSON.parse(r.v))}catch(e){}});
-  posts.forEach(p=>{const r=(t.posts||[]).find(x=>x.id===p.id);p._rev=(r&&r.rev)||'';p._snap=snapOf(p)});
+  posts.forEach(p=>{const r=(t.posts||[]).find(x=>sid(x.id)===p.id);p._rev=(r&&r.rev)||'';p._snap=snapOf(p)});
   P0.posts=posts;P0._gsnap={};P0.tasks.forEach(x=>{P0._gsnap[x.id]=JSON.stringify(gRow(x))});return P0;
 }
 function setData(data,meta){
@@ -143,7 +142,7 @@ const gRow=t=>({id:t.id,pid:'',t:t.t,due:t.due,done:Y(t.done),doneAt:t.doneAt||'
 async function api(action,body){
   if(!cfg.server)throw {code:'no_server'};
   let res;
-  try{res=await fetch(cfg.server,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({sess:cfg.sess,action},body||{}))})}
+  try{res=await fetch(DEFAULT_SERVER,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({sess:cfg.sess,action},body||{}))})}
   catch(e){throw {code:'network'}}
   let j;try{j=await res.json()}catch(e){throw {code:'bad_response'}}
   if(!j.ok&&j.error==='auth'&&action!=='login'){logout(true);throw {code:'auth'}}
@@ -158,11 +157,13 @@ async function flush(){
   const items=[...queue.entries()];queue.clear();
   const byW={},dones=[];
   items.forEach(([k,it])=>{const r=it.opsFn();const ops=Array.isArray(r)?r:(r.ops||[]);(byW[it.w]=byW[it.w]||[]).push(...ops);if(r.done)dones.push({k,done:r.done})});
+  /* 보내기 전에 보낼 내용을 기기에도 적어 둠 → 저장 실패 뒤 창을 닫아도 다음에 열 때 마저 보냄 (sendPend) */
+  const pend={email:cfg.email,byW:{}};Object.keys(byW).forEach(w=>{if(byW[w].length)pend.byW[w]=byW[w]});LS.set('pend',pend);
   try{let conf=[],revs={};
-    for(const w of Object.keys(byW))if(byW[w].length){const j=await api('batch',{pid:w,ops:byW[w]});conf=conf.concat(j.conflicts||[]);Object.assign(revs,j.revs||{})}
-    dones.forEach(d=>{if(!conf.includes(d.k))d.done(revs)});if(conf.length)reloadAfter=true;cacheData()}
-  catch(e){if(e&&e.code==='auth'){saving=false;return}if(e&&e.code==='forbidden'){toast('이 플래너를 고칠 권한이 없어요. 새로 불러올게요');saving=false;refresh(true);return}
-    saveErr=true;items.forEach(([k,it])=>{if(!queue.has(k))queue.set(k,it)})}
+    for(const w of Object.keys(byW))if(byW[w].length){const j=await api('batch',{pid:w,ops:byW[w]});conf=conf.concat(j.conflicts||[]);Object.assign(revs,j.revs||{});delete pend.byW[w];LS.set('pend',pend)}
+    LS.del('pend');dones.forEach(d=>{if(!conf.includes(d.k))d.done(revs)});if(conf.length)reloadAfter=true;cacheData()}
+  catch(e){if(e&&e.code==='auth'){saving=false;return}if(e&&e.code==='forbidden'){LS.del('pend');toast('이 플래너를 고칠 권한이 없어요. 새로 불러올게요');saving=false;refresh(true);return}
+    saveErr=true;items.forEach(([k,it])=>{if(!queue.has(k))queue.set(k,it)});cacheData()}
   saving=false;showSync();
   if(queue.size&&!saveErr){flush();return}
   if(reloadAfter&&!queue.size){reloadAfter=false;await refresh(true);toast('다른 기기에서 바뀐 공고가 있어서 새로 불러왔어요. 방금 한 수정은 다시 해 주세요')}
@@ -186,8 +187,20 @@ function cacheData(){/* 서버 형식으로 다시 만들어 기기에 보관 */
 }
 function applyLoad(j){setData(j.data,j.meta);if(META.status&&META.status!=='승인'){S.me=null;S.who=null;S.open=null;S.dlg=null}raw=j.data;LS.set('cache',{at:Date.now(),data:j.data,meta:META,email:cfg.email});if(j.usage){usage=j.usage;LS.set('usage',usage)}if(j.sheets)sheets=j.sheets;
   if(S.who&&!DB[S.who]){S.who=META.me;S.open=null}}
+/* 지난번에 저장 못 하고 닫힌 수정이 기기에 남아 있으면 먼저 보냄. 그사이 다른 기기에서 바뀐 공고는 서버가 거절(덮어쓰지 않음) */
+let pendBusy=false;
+async function sendPend(){
+  const pd=LS.get('pend',null);if(!pd||pendBusy)return;
+  if(pd.email!==cfg.email||!pd.byW){LS.del('pend');return}
+  pendBusy=true;let conf=0,sent=0;
+  try{for(const w of Object.keys(pd.byW)){const j=await api('batch',{pid:w,ops:pd.byW[w]});conf+=(j.conflicts||[]).length;sent++;delete pd.byW[w];LS.set('pend',pd)}
+    LS.del('pend');if(sent)toast(conf?'저장 못 했던 수정을 보냈어요. 다만 다른 기기에서 바뀐 공고는 덮어쓰지 않았어요':'저장 못 했던 수정을 마저 저장했어요')}
+  catch(e){if(e&&e.code!=='network'&&e.code!=='auth')LS.del('pend')}
+  finally{pendBusy=false}
+}
 async function refresh(quiet){
   if(queue.size||saving)return;
+  await sendPend();if(queue.size||saving)return;
   try{const j=await api('loadAll');applyLoad(j);
     if(!S.me)render();else if(!S.dlg&&!S.editQ&&!(document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)))render()}
   catch(e){if(!quiet&&e.code!=='auth')toast(errMsg(e))}
@@ -225,7 +238,7 @@ const full=p=>`[${String(p.co).trim()}] ${p.role||p.job}`;
 function evsOf(p){const a=(p.events||[]).map(e=>Object.assign({},e));if(p.dueKind==='확정'&&p.due&&p.stage!=='종료')a.push({d:p.due.slice(0,10),k:'due',t:'서류 마감 '+p.due.slice(11,16)});return a}
 function nextEv(p){return (p.events||[]).filter(e=>diff(e.d)>=0).sort((a,b)=>a.d.localeCompare(b.d))[0]}
 function tasksOf(w){const out=[];DB[w].posts.forEach(p=>p.tasks.forEach((t,i)=>out.push({t,p,key:p.id+':'+i})));DB[w].tasks.forEach((t,i)=>out.push({t,p:null,key:'g:'+w+':'+i}));return out}
-function dueText(p){if(p.dueKind==='확정'&&p.due)return `${md(p.due)} ${p.due.slice(11,16)} 마감`;if(p.dueKind==='채용시')return '채용 시 마감';return '마감 미확인'+(p.recheck?` · ${md(p.recheck)} 재확인`:'')}
+function dueText(p){if(p.dueKind==='확정'&&p.due)return `${md(p.due)} ${esc(p.due.slice(11,16))} 마감`;if(p.dueKind==='채용시')return '채용 시 마감';return '마감 미확인'+(p.recheck?` · ${md(p.recheck)} 재확인`:'')}
 function hist(p,t){p.hist.push({id:uid(),d:TODAY,t})}
 const snap=p=>JSON.parse(JSON.stringify(p));
 function restore(p,b){Object.keys(p).forEach(k=>delete p[k]);Object.assign(p,b)}
@@ -315,7 +328,7 @@ async function onCred(resp){
 }
 function enterMine(){S.me=META.me;S.who=S.me;S.view=narrow()?'home':'cal';S.calMode='month';S.open=null;S.dlg=null;render()}
 function logout(expired){
-  cfg.sess='';cfg.email='';saveCfg();LS.del('cache');queue.clear();
+  cfg.sess='';cfg.email='';saveCfg();LS.del('cache');if(!expired)LS.del('pend');queue.clear();
   try{if(window.google&&google.accounts&&google.accounts.id)google.accounts.id.disableAutoSelect()}catch(e){}
   Object.keys(DB).forEach(k=>delete DB[k]);META={email:'',me:'',names:{},planners:[]};loaded=false;
   S.me=null;S.who=null;S.open=null;S.dlg=null;S.loginErr=expired?'로그인이 만료됐어요. 다시 로그인해 주세요':'';render();
@@ -394,7 +407,7 @@ function homeHTML(){
   const taskRow=x=>{const n=diff(x.t.due);return `<div class="row ${x.t.done?'done':''}"><input type="checkbox" class="chk" data-ch="task" data-k="${x.key}" ${x.t.done?'checked':''} ${ro()?'disabled':''} aria-label="완료"><span class="grow"><div class="t">${esc(x.t.t)}${x.t.auto?' <span class="pill mute">자동</span>':''}</div><div class="s">${x.p?esc(shortCo(x.p.co))+' · ':''}${x.t.done?'오늘 완료':n<0?`<span class="late">${md(x.t.due)} 지남</span>`:n===0?'오늘':md(x.t.due)}</div></span>${x.p?`<button class="link-btn" data-act="open" data-id="${x.p.id}">공고 ›</button>`:''}</div>`};
   const left=today.filter(x=>!x.t.done).length;
   const tkH=(today.length?today.map(taskRow).join(''):`<div class="empty">오늘 기한인 할 일이 없어요</div>`)+(soon.length?`<div class="sub-h">다가오는 할 일</div>`+soon.map(taskRow).join(''):'')+(ro()?'':`<div class="inline"><input type="text" id="gtT" placeholder="공고와 상관없는 할 일 (예: 스터디 발표 준비)"><input type="date" id="gtD" value="${TODAY}" aria-label="기한"><button class="btn sm" data-act="add-gtask">추가</button></div>`);
-  const ncH=nc.map(({p,c})=>`<div class="row click newc" role="button" tabindex="0" data-act="open-c" data-id="${p.id}" data-c="${c.id}"><span class="kind">💬</span><span class="grow"><div class="t">${esc(nm(c.by)||c.by)} · ${esc(label(p))}${c.qi>=0?` · ${c.qi+1}번`:' · 공고 댓글'}</div><div class="s oneline">${c.quote?'“'+esc(c.quote)+'” — ':''}${esc(c.text)}</div></span><span class="chev">›</span></div>`).join('');
+  const ncH=nc.map(({p,c})=>`<div class="row click newc" role="button" tabindex="0" data-act="open-c" data-id="${p.id}" data-c="${esc(c.id)}"><span class="kind">💬</span><span class="grow"><div class="t">${esc(nm(c.by)||c.by)} · ${esc(label(p))}${c.qi>=0?` · ${c.qi+1}번`:' · 공고 댓글'}</div><div class="s oneline">${c.quote?'“'+esc(c.quote)+'” — ':''}${esc(c.text)}</div></span><span class="chev">›</span></div>`).join('');
   const overH=over.map(p=>{const n=diff(p.due);return `<div class="row click overdue" role="button" tabindex="0" data-act="open" data-id="${p.id}"><span class="dd urgent">${ddL(n)}</span><span class="grow"><div class="t oneline">${esc(label(p))}</div><div class="s"><span class="late">마감 지남 · 미제출</span> · ${md(p.due)} ${p.due.slice(11,16)}</div>${ro()?'':`<div class="acts"><button class="btn sm" data-act="od-sub" data-id="${p.id}">제출했음</button><button class="btn sm" data-act="od-ext" data-id="${p.id}">마감 연장</button><button class="btn sm" data-act="od-drop" data-id="${p.id}">포기</button></div>`}</span></div>`}).join('');
   const urgH=urg.map(p=>{const n=diff(p.due);return rowOpen(p.id,'',`<span class="dd ${ddC(n)}">${ddL(n)}</span><span class="grow"><div class="t oneline" title="${esc(full(p))}">${esc(label(p))}</div><div class="s">${COLNAME[p.stage]}${p.qs.length?` · 문항 ${p.qs.filter(q=>q.st==='제출본').length}/${p.qs.length}`:''} · ${md(p.due)} ${p.due.slice(11,16)}</div></span><span class="chev">›</span>`)}).join('');
   const unkH=unk.map(p=>rowOpen(p.id,'',`<span class="dd unk">미확인</span><span class="grow"><div class="t oneline">${esc(label(p))}</div><div class="s">${esc(dueText(p))}</div></span><span class="chev">›</span>`)).join('');
@@ -472,7 +485,7 @@ function listSorted(){const k=S.lSort,dir=S.lDir;
     return (typeof x==='number'?x-y:String(x).localeCompare(String(y),'ko'))*dir})}
 function stagePill(p){if(p.stage==='종료')return resPill(p);const c=COLS.find(c=>c[0]===p.stage);return `<span class="stg"><i class="dot" style="--c:var(${c?c[2]:'--st-start'})"></i>${esc(COLNAME[p.stage]||p.stage)}</span>`}
 function listRows(){const rows=listSorted();
-  const d=s=>s?s.slice(2,10).replace(/-/g,'.'):'<span class="muted">-</span>';
+  const d=s=>s?esc(s.slice(2,10).replace(/-/g,'.')):'<span class="muted">-</span>';
   return {n:rows.length,h:rows.map(p=>`<tr data-act="open" data-id="${p.id}"><td><b>${esc(shortCo(p.co))}</b><div class="sub oneline">${esc(p.role||'')}</div></td><td>${stagePill(p)}</td><td class="hide-n">${esc(p.type||'')}</td><td class="hide-n">${esc(p.job||'')}</td><td class="hide-n">${esc(p.ind||'')}</td><td class="num">${p.dueKind==='확정'&&p.due?d(p.due):`<span class="muted">${p.dueKind==='채용시'?'채용 시':'미확인'}</span>`}</td><td class="num hide-n">${d(p.submitted)}</td></tr>`).join('')||'<tr><td colspan="7" class="muted">조건에 맞는 공고가 없어요</td></tr>'}}
 function listHTML(){const f=S.lf,r=listRows();
   const sel=(ch,cur,opts,all)=>`<select data-ch="${ch}" aria-label="${all}"><option value="">${all}</option>${opts.map(o=>{const[v,n]=Array.isArray(o)?o:[o,o];return `<option value="${esc(v)}" ${cur===v?'selected':''}>${esc(n)}</option>`}).join('')}</select>`;
@@ -589,13 +602,13 @@ function hl(text,cs){
   return {h,lost,placed};
 }
 function cmtH(p,c,lostIds){
-  return `<div class="cmt ${c.resolved?'res':''} ${S.flash===c.id?'flash':''}" id="c-${c.id}">
+  return `<div class="cmt ${c.resolved?'res':''} ${S.flash===c.id?'flash':''}" id="c-${esc(c.id)}">
    <div><span class="who">${esc(nm(c.by)||c.by||'노션')}</span> <span class="muted small">${md(c.at)}${c.ver?` · ${esc(c.ver)}에 단 댓글`:''}</span>${c.resolved?' <span class="pill mute">해결</span>':''}</div>
    ${c.quote?`<div class="q-quote">“${esc(c.quote)}”${lostIds.includes(c.id)?' <span class="lost">· 원래 문장 (지금은 수정됨)</span>':''}</div>`:''}
    <div style="white-space:pre-wrap">${esc(c.text)}</div>
    ${c.replies.map(r=>`<div class="rep"><span class="who">${esc(nm(r.by)||r.by)}</span> ${esc(r.text)}</div>`).join('')}
-   ${S.replyTo===c.id?`<div class="inline"><input type="text" id="rTxt" placeholder="답글 입력"><button class="btn sm" data-act="reply-ok" data-c="${c.id}">등록</button></div>`:''}
-   ${canComment(owner(p))?`<div class="acts2"><button class="link-btn small" data-act="reply" data-c="${c.id}">답글</button><button class="link-btn small" data-act="resolve" data-c="${c.id}">${c.resolved?'다시 열기':'해결'}</button></div>`:''}</div>`;
+   ${S.replyTo===c.id?`<div class="inline"><input type="text" id="rTxt" placeholder="답글 입력"><button class="btn sm" data-act="reply-ok" data-c="${esc(c.id)}">등록</button></div>`:''}
+   ${canComment(owner(p))?`<div class="acts2"><button class="link-btn small" data-act="reply" data-c="${esc(c.id)}">답글</button><button class="link-btn small" data-act="resolve" data-c="${esc(c.id)}">${c.resolved?'다시 열기':'해결'}</button></div>`:''}</div>`;
 }
 function cmtList(p,cs,lostIds,key){
   const open=cs.filter(c=>!c.resolved),done=cs.filter(c=>c.resolved);
@@ -611,7 +624,7 @@ function qBlock(p,q,i,r){
   const {h,lost,placed}=hl(q.a,cs);
   return `<div class="q" data-qi="${i}"><p><b>${i+1}.</b> ${esc(q.t)} <span class="muted small">${q.n?'· '+q.n.toLocaleString()+'자':''}</span></p>
    <div class="ans ${q.a?'':'empty-a'}" data-pid="${p.id}" data-qi="${i}">${q.a?h:'아직 답변이 없어요'+(r?'':' · [정보 수정]에서 쓸 수 있어요')}</div>
-   <div class="qbar"><span class="cnt ${q.n&&len>q.n?'over':''}">${len.toLocaleString()} / ${q.n?q.n.toLocaleString():'-'}자</span>${q.a&&canComment(owner(p))?'<span>· 문장을 드래그하면 댓글을 달 수 있어요</span>':''}<span class="sp"><span class="pill ${q.st==='제출본'?'ok':'mute'}">${q.st}${q.lock?' 🔒':''}</span></span></div>
+   <div class="qbar"><span class="cnt ${q.n&&len>q.n?'over':''}">${len.toLocaleString()} / ${q.n?q.n.toLocaleString():'-'}자</span>${q.a&&canComment(owner(p))?'<span>· 문장을 드래그하면 댓글을 달 수 있어요</span>':''}<span class="sp"><span class="pill ${q.st==='제출본'?'ok':'mute'}">${esc(q.st)}${q.lock?' 🔒':''}</span></span></div>
    ${cs.length?qCmts(p,cs,lost,placed,p.id+':'+i):''}</div>`;
 }
 /* 정보 수정 모드: 문항·답변 편집 */
@@ -666,7 +679,7 @@ function detailHTML(p){
    ${!ed&&p.memo?`<div class="blk"><div class="blk-h">비고</div><div style="white-space:pre-wrap">${esc(p.memo)}</div></div>`:''}
    <div class="blk"><div class="blk-h">공고 댓글 <span class="count">${pcs.filter(c=>!c.resolved).length}</span></div>${pcs.length?cmtList(p,pcs,[],p.id+':p'):''}
     ${cc?`<div class="inline"><input type="text" id="pcTxt" placeholder="${away?esc(nm(W))+' 님에게 의견 남기기':'메모나 의견 남기기'}"><button class="btn sm" data-act="add-pc">등록</button></div>`:''}</div>
-   <div class="blk"><div class="blk-h">이력</div><div class="hist">${p.hist.slice().reverse().map(h=>`<div><span class="num">${String(h.d).slice(5,10).replace('-','/')}</span>${esc(h.t)}</div>`).join('')}</div></div>
+   <div class="blk"><div class="blk-h">이력</div><div class="hist">${p.hist.slice().reverse().map(h=>`<div><span class="num">${esc(String(h.d).slice(5,10).replace('-','/'))}</span>${esc(h.t)}</div>`).join('')}</div></div>
    <div class="blk"><div class="blk-h">자소서 문항 · 답변 ${(p.qs.find(q=>q.ver)||{}).ver?`<span class="pill">${esc(p.qs.find(q=>q.ver).ver)}</span>`:''} <span class="muted">${p.qs.length?`제출본 ${p.qs.filter(q=>q.st==='제출본').length}/${p.qs.length}`:''}</span></div>
     ${ed?ed.qs.map((q,i)=>qEdit(q,i)).join('')+'<button class="btn sm" style="align-self:flex-start" data-act="ed-q-add">+ 문항 추가</button>'
        :(p.qs.map((q,i)=>qBlock(p,q,i,r)).join('')||'<div class="muted small">문항이 없어요'+(r?'':' · [정보 수정]에서 추가할 수 있어요')+'</div>')}</div>
@@ -675,13 +688,23 @@ function detailHTML(p){
    ${cc?'<div class="selbar" id="selbar" hidden><span id="selTxt"></span><button data-act="sel-c">💬 댓글</button></div>':''}
   </div>`;
 }
-function edStart(p,focus){S.ed={pid:p.id,v:fromPost(p),focus:!!focus};S.delAsk=false;hidePop()}
+function edStart(p,focus){S.ed={pid:p.id,v:fromPost(p),orig:fromPost(p),focus:!!focus};S.delAsk=false;hidePop()}
+/* 편집 중 다른 기기 변경 합치기: 편집 시작 때 내용(orig)과 비교해 내가 바꾼 칸만 최신 공고 위에 올림.
+   같은 칸을 다른 기기에서도 다르게 바꿨으면 알리고 멈춤 → 한 번 더 저장하면 내 것으로 덮어씀 */
+const ED_F={co:'회사',short:'달력 이름',job:'직무',role:'상세 직무',type:'유형',ind:'업권',loc:'근무지',applyStart:'접수 시작',dueKind:'마감 종류',due:'마감',recheck:'재확인일',steps:'전형 절차',link:'공고 링크',relLink:'관련 자료',memo:'비고',stage:'단계'};
+const qsKey=qs=>JSON.stringify((qs||[]).map(q=>[q.id||'',q.t||'',+q.n||0,q.a||'',q.st||'',!!q.lock]));
+function edMerge(p){
+  const v=S.ed.v,o=S.ed.orig||fromPost(p),c=fromPost(p),clash=[],str=x=>String(x??'');
+  Object.keys(ED_F).forEach(k=>{if(str(v[k])===str(o[k]))v[k]=c[k];else if(str(c[k])!==str(o[k])&&str(c[k])!==str(v[k]))clash.push(ED_F[k])});
+  if(qsKey(v.qs)===qsKey(o.qs))v.qs=c.qs;else if(qsKey(c.qs)!==qsKey(o.qs)&&qsKey(c.qs)!==qsKey(v.qs))clash.push('문항');
+  S.ed.orig=c;return clash}
 function syncEd(){if(!S.ed)return;const v=S.ed.v;
   document.querySelectorAll('.sheet [data-f]').forEach(el=>{v[el.dataset.f]=el.value});
   const jn=document.getElementById('fJobNew');if(jn)v._jobNew=jn.value;
   document.querySelectorAll('.sheet [data-q]').forEach(el=>{const q=v.qs[+el.dataset.q];if(!q)return;const f=el.dataset.qf;if(f==='n')q.n=Math.max(0,parseInt(el.value,10)||0);else q[f]=el.value})}
 function edSave(){
-  syncEd();const p=find(S.ed.pid),v=S.ed.v;if(!p){S.ed=null;return}
+  syncEd();const p=find(S.ed.pid),v=S.ed.v;if(!p){S.ed=null;renderLayer();toast('다른 기기에서 이 공고를 지워서 저장하지 못했어요');return}
+  {const clash=edMerge(p);if(clash.length){S.ed.noSync=true;renderLayer();toast(`다른 기기에서 ${clash.join(', ')}도 바뀌었어요. 지금 화면 내용으로 덮어쓰려면 저장을 한 번 더 눌러 주세요`);return}}
   if(!v.co.trim()){toast('회사 이름은 꼭 넣어 주세요');return}
   const badUrl=[[v.link,'공고 주소'],[v.relLink,'관련 자료 링크']].find(([u])=>String(u||'').trim()&&!okUrl(u));if(badUrl){toast(badUrl[1]+'가 잘못된 주소예요');return}
   if(v.dueKind==='확정'&&!v.due){toast('마감 일시를 넣거나 마감 종류를 바꿔 주세요');return}
@@ -690,7 +713,7 @@ function edSave(){
   Object.assign(p,{co:v.co.trim(),short:(v.short||'').trim(),job,role:v.role.trim(),type:v.type,ind:v.ind,loc:v.loc.trim(),applyStart:v.applyStart,dueKind:v.dueKind,
     due:v.dueKind==='확정'?v.due.slice(0,16):null,recheck:v.dueKind==='미확인'?v.recheck:'',steps:v.steps.split('>').map(s=>s.trim()).filter(Boolean),
     link:v.link.trim(),relLink:v.relLink.trim(),memo:v.memo.trim(),
-    qs:v.qs.filter(q=>(q.t||'').trim()||(q.a||'').trim()).map(q=>{const st=q.st||((q.a||'').trim()?'초안':'미작성');return {id:q.id||uid(),t:(q.t||'').trim(),n:q.n||0,a:q.a||'',st:(st==='미작성'&&(q.a||'').trim())?'초안':st,lock:st==='제출본'}})});
+    qs:v.qs.filter(q=>(q.t||'').trim()||(q.a||'').trim()).map(q=>{const st=q.st||((q.a||'').trim()?'초안':'미작성');return {id:q.id||uid(),t:(q.t||'').trim(),n:q.n||0,a:q.a||'',st:(st==='미작성'&&(q.a||'').trim())?'초안':st,lock:st==='제출본',ver:q.ver||''}})});
   if(!p.steps.length)p.steps=['서류'];if(p.cur>=p.steps.length)p.cur=p.steps.length-1;
   ensureAuto(p);hist(p,'정보 수정');S.ed=null;S.delAsk=false;
   if(newStage!==oldStage){S.undo={id:p.id,before:b};dirty(p);setStage(p,newStage);return}
@@ -724,7 +747,7 @@ window.addEventListener('popstate',e=>{const st=e.state;if(!st||!S.me)return;his
 function renderLayer(){
   if(!S.me){layer.innerHTML=startHTML();mountGoogle();return}
   histSync();
-  if(S.ed&&layer.querySelector('.sheet [data-f]'))syncEd();
+  if(S.ed&&!S.ed.noSync&&layer.querySelector('.sheet [data-f]'))syncEd();if(S.ed)S.ed.noSync=false;/* noSync: 방금 합친 내용을 화면의 옛 값으로 되돌리지 않게 */
   let h='';
   if(S.open){const p=find(S.open);if(p)h+=`<div class="scrim" data-act="close"></div><aside class="sheet" role="dialog" aria-label="공고 상세">${detailHTML(p)}</aside>`;else S.open=null}
   if(S.dlg)h+=`<div class="scrim" data-act="dlg-close" style="z-index:52"></div><div class="dlg" role="dialog">${S.dlg()}</div>`;
@@ -765,6 +788,7 @@ function setStage(p,st){
 }
 function settingsDlg(){const w=S.me;show(()=>dlgHead('설정 · '+esc(nm(w)))+`<div class="dlg-b" style="gap:0">
   <div class="set-row"><div><b>구글 계정</b><div class="muted small">${esc(META.email)}</div></div><button class="link-btn" data-act="logout">로그아웃</button></div>
+  <div class="set-row"><div><b>모든 기기에서 로그아웃</b><div class="muted small">휴대폰·다른 PC 등 이 계정으로 로그인된 곳을 모두 끊어요. 기기를 잃어버렸을 때 써 주세요</div></div><button class="link-btn" data-act="logout-all" style="color:var(--urgent);white-space:nowrap;flex-shrink:0">모두 로그아웃</button></div>
   <div class="set-row"><div><b>내 플래너 공유</b><div class="muted small">${shareSummary(w)}</div></div><button class="btn sm" data-act="share" data-v="${w}">공유 설정</button></div>
   <div class="set-row"><div><b>공고 정리</b><div class="muted small">${usage.hasKey===false?'API 키가 아직 연결되지 않았어요':`오늘 ${usage.used} / ${usage.limit}회 사용 (한 사람당 하루 한도)`}</div></div>${sheets[w]?`<a class="link-btn" href="${esc(sheets[w])}" target="_blank" rel="noopener noreferrer">${esc(nm(w))} 시트 열기 ↗</a>`:''}</div>
   <div class="set-row" style="flex-direction:column;align-items:stretch;gap:8px"><b>내 직무 선택지</b><span class="muted small">공고 정리 때 이 목록으로 분류하고, 직무가 여러 개인 공고에선 여기 없는 직무를 빼고 보여 줘요</span><div class="jobs">${DB[w].jobs.map(j=>`<span>${esc(j)}${0?'':` <button class="x-btn" data-act="job-del" data-v="${esc(j)}" aria-label="${esc(j)} 빼기" title="목록에서 빼기">✕</button>`}</span>`).join('')}</div><div class="inline"><input type="text" id="jobNew" placeholder="직무 추가 (예: 손익관리)"><button class="btn sm" data-act="job-add">추가</button></div></div>
@@ -793,7 +817,7 @@ function shareDlg(pid){S.shMenu=null;S.shRole=S.shRole||'comment';
     const can=canShare(pid),av=t=>`<span class="av">${esc(String(t||'?').slice(0,1).toUpperCase())}</span>`;
     const ownerRow=`<div class="sh-row">${av(pl.name)}<span class="grow"><b>${esc(pl.name)}${pl.owner&&pl.owner===META.email?' (나)':''}</b><span class="muted small">${esc(pl.owner||'주인 미지정')}</span></span><span class="sh-role">주인</span></div>`;
     const rows=pl.shares.map(x=>{const me=x.email===META.email,open=S.shMenu===x.email;
-      return `<div class="sh-row">${av(x.name||x.email)}<span class="grow"><b>${esc(x.name||x.email.split('@')[0])}${me?' (나)':''}</b><span class="muted small">${esc(x.email)}</span></span>${can||me?`<button class="sh-role" data-act="sh-menu" data-em="${esc(x.email)}" aria-expanded="${open}">${ROLE_NAME[x.role]||x.role} ▾</button>${open?roleMenuH(pid,x.email,x.role,can):''}`:`<span class="sh-role">${ROLE_NAME[x.role]||x.role}</span>`}</div>`}).join('');
+      return `<div class="sh-row">${av(x.name||x.email)}<span class="grow"><b>${esc(x.name||x.email.split('@')[0])}${me?' (나)':''}</b><span class="muted small">${esc(x.email)}</span></span>${can||me?`<button class="sh-role" data-act="sh-menu" data-em="${esc(x.email)}" aria-expanded="${open}">${esc(ROLE_NAME[x.role]||x.role)} ▾</button>${open?roleMenuH(pid,x.email,x.role,can):''}`:`<span class="sh-role">${esc(ROLE_NAME[x.role]||x.role)}</span>`}</div>`}).join('');
     return dlgHead(`공유 · ${esc(pl.name)} 플래너`)+`<div class="dlg-b">
      ${can?`<div class="sh-add"><input type="text" id="shEm" placeholder="쉼표로 구분한 이메일" autocomplete="off" aria-label="공유할 이메일"><select id="shRole" aria-label="권한">${ROLES.map(([k,n])=>`<option value="${k}" ${S.shRole===k?'selected':''}>${n}</option>`).join('')}</select><button class="btn primary sm" data-act="sh-add" data-pid="${pid}" ${S.shBusy?'disabled':''}>${S.shBusy?'공유 중…':'공유하기'}</button></div>`
        :'<span class="muted small">공유 설정은 플래너 주인만 바꿀 수 있어요</span>'}
@@ -1018,6 +1042,7 @@ document.addEventListener('click',e=>{
     case 'sh-menu':S.shMenu=S.shMenu===t.dataset.em?null:t.dataset.em;renderLayer();break;
     case 'sh-set':setRole(t.dataset.pid,t.dataset.em,v);break;
     case 'logout':logout(false);break;
+    case 'logout-all':if(t.dataset.ok!=='1'){t.dataset.ok='1';t.textContent='한 번 더 누르면 모두 끊겨요';break}api('logoutAll').then(()=>{logout(false);toast('모든 기기에서 로그아웃했어요')}).catch(e=>toast(errMsg(e)));break;
     case 'recheck':recheck();break;
     case 'nav':S.view=v;S.open=null;S.dlg=null;render();break;
     case 'open':S.open=id;S.ed=null;S.delAsk=false;S.editQ=null;S.flash=null;S.replyTo=null;{const q=find(id);if(q)markRead(q)}render();break;
@@ -1054,7 +1079,7 @@ document.addEventListener('click',e=>{
     case 'c-ok':if(p&&S.sel&&canComment(owner(p))){const x=$('#cTxt').value.trim();if(!x){toast('댓글 내용을 적어 주세요');break}const c={id:uid(),qi:S.sel.qi,quote:S.sel.quote,text:x,by:S.me,at:TODAY,replies:[],resolved:false,read:mine(p),ver:((p.qs[S.sel.qi]||{}).ver||'').split(' · ')[0]};p.comments.push(c);dirtyC(p,c);S.sel=null;S.dlg=null;S.flash=c.id;render();toast(mine(p)?'댓글을 달았어요':`${nm(owner(p))} 님에게 댓글을 남겼어요`)}break;
     case 'add-pc':if(p&&canComment(owner(p))){const x=$('#pcTxt').value.trim();if(!x){toast('내용을 적어 주세요');break}const c={id:uid(),qi:-1,quote:'',text:x,by:S.me,at:TODAY,replies:[],resolved:false,read:mine(p)};p.comments.push(c);dirtyC(p,c);render();toast('댓글을 남겼어요')}break;
     case 'reply':S.replyTo=S.replyTo===t.dataset.c?null:t.dataset.c;if(t.closest('#cpop')){const pp=document.getElementById('cpop');S.pin=(pp.dataset.ids||'').split(' ')[0]||S.pin}renderLayer();{const r=$('#rTxt');if(r)r.focus()}break;
-    case 'reply-ok':if(p&&canComment(owner(p))){const c=p.comments.find(x=>x.id===t.dataset.c);const x=$('#rTxt').value.trim();if(c&&x){c.replies.push({text:x,by:S.me,at:TODAY});if(owner(p)!==S.me)c.read=false;dirtyC(p,c);S.replyTo=null;render()}}break;
+    case 'reply-ok':if(p&&canComment(owner(p))){const c=p.comments.find(x=>x.id===t.dataset.c);const x=$('#rTxt').value.trim();if(c&&x){c.replies.push({id:uid(),text:x,by:S.me,at:TODAY});if(owner(p)!==S.me)c.read=false;dirtyC(p,c);S.replyTo=null;render()}}break;
     case 'resolve':if(p&&canComment(owner(p))){const c=p.comments.find(x=>x.id===t.dataset.c);if(c){c.resolved=!c.resolved;dirtyC(p,c);render();toast(c.resolved?'해결로 표시했어요':'다시 열었어요')}}break;
     case 'show-res':S.showRes[v]=!S.showRes[v];renderLayer();break;
     case 'board-col':S.boardCol=v;render();break;

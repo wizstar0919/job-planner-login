@@ -64,7 +64,8 @@ function doPost(e) {
       case 'share': return out_(share_(email, String(req.pid || ''), req.emails || [], String(req.role || '')));
       case 'setRole': return out_(setRole_(email, String(req.pid || ''), String(req.email || ''), String(req.role || '')));
       case 'extract': return out_(approved_(email) ? extract_(req.input || {}, email) : { ok: false, error: 'forbidden' });
-      case 'fetchImg': return out_(approved_(email) ? fetchImg_(req.url) : { ok: false, error: 'forbidden' });
+      case 'fetchImg': return out_(approved_(email) ? fetchImgFor_(email, req.url) : { ok: false, error: 'forbidden' });
+      case 'logoutAll': bumpSess_(email); return out_({ ok: true });
       case 'adminInfo': case 'approve': case 'setLimit': case 'setDefaults': case 'setOwner':
         return out_(email === admin_() ? adminAct_(email, req) : { ok: false, error: 'forbidden' });
       default: return out_({ ok: false, error: 'unknown_action' });
@@ -222,6 +223,7 @@ function adminAct_(admin, req) {
     if (!isEmail_(target) || target === admin) return { ok: false, error: 'bad_email' };
     if ([ST.ok, ST.no, ST.wait].indexOf(status) < 0) return { ok: false, error: 'bad_role' };
     editReg_(reg => { const m = memberRow_(reg, target); m.status = status; m.decided = today_(); });
+    if (status !== ST.ok) bumpSess_(target); // 거절·대기로 바꾸면 그 사람 기기의 로그인도 모두 끊음
   } else if (req.action === 'setLimit') {
     const target = normEmail_(req.email), v = String(req.limit == null ? '' : req.limit).trim();
     if (!isEmail_(target)) return { ok: false, error: 'bad_email' };
@@ -299,8 +301,11 @@ function login_(idToken) {
 }
 function secret_() { return props_().getProperty('SESSION_SECRET'); }
 function b64_(bytes) { return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/, ''); }
+/* 세션 번호: 사람마다 하나. 올리면 그 사람의 예전 세션이 모두 무효 (모든 기기에서 로그아웃 · 이용 중지) */
+function sessVer_(email) { return Number(props_().getProperty('SV_' + email) || 0); }
+function bumpSess_(email) { props_().setProperty('SV_' + email, String(sessVer_(email) + 1)); }
 function makeSession_(email) {
-  const body = b64_(Utilities.newBlob(JSON.stringify({ e: email, x: Date.now() + SESSION_DAYS * 864e5 })).getBytes());
+  const body = b64_(Utilities.newBlob(JSON.stringify({ e: email, x: Date.now() + SESSION_DAYS * 864e5, v: sessVer_(email) })).getBytes());
   return body + '.' + b64_(Utilities.computeHmacSha256Signature(body, secret_()));
 }
 function checkSession_(tok) {
@@ -312,8 +317,10 @@ function checkSession_(tok) {
   try {
     const pad = body + '==='.slice((body.length + 3) % 4);
     const o = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(pad)).getDataAsString());
-    if (!o.e || Date.now() > o.x) return '';
-    return normEmail_(o.e);
+    if (!o.e || !(Date.now() <= Number(o.x))) return '';
+    const em = normEmail_(o.e);
+    if (Number(o.v || 0) !== sessVer_(em)) return '';
+    return em;
   } catch (e) { return ''; }
 }
 
@@ -423,14 +430,65 @@ function batchFor_(email, pid, ops) {
     const onlyComments = RANK[role] >= RANK.comment && ops.every(op => op.table === 'comments' && op.op === 'upsert');
     if (!onlyComments) return { ok: false, error: 'forbidden' };
   }
-  return batch_(reg.planners.find(x => x.id === pid), ops);
+  if (!validOps_(ops)) return { ok: false, error: 'bad_request' };
+  const pl = reg.planners.find(x => x.id === pid), mine = reg.planners.find(x => x.owner === email);
+  // 댓글 작성자는 화면이 보낸 값이 아니라 로그인한 사람(의 플래너 id)으로 정함
+  return batch_(pl, ops, { owner: role === 'owner', actor: mine ? mine.id : email });
+}
+
+/* 저장 요청 형식 검사: id 에 따옴표·꺾쇠 같은 글자가 들어오면 거절 (화면에 그릴 때 코드가 끼어들 수 없게) */
+const SAFE_ID = /^[^\s"'<>&`=\\]{1,100}$/;
+function validOps_(ops) {
+  if (!Array.isArray(ops) || ops.length > 2000) return false;
+  return ops.every(op => {
+    if (!op || typeof op !== 'object') return false;
+    if (op.op === 'check') return SAFE_ID.test(String(op.id || ''));
+    if (!SCHEMA[op.table]) return false;
+    if (op.op === 'remove') return ['id', 'pid', 'k'].indexOf(op.key) >= 0 && SAFE_ID.test(String(op.value || ''));
+    if (op.op !== 'upsert' || op.key || !Array.isArray(op.rows)) return false; // 임의의 기준 칸(key)으로 덮어쓰기 금지
+    return op.rows.every(n => {
+      if (!n || typeof n !== 'object') return false;
+      if (op.table === 'settings') return ['jobs', 'inds', 'auto'].indexOf(String(n.k)) >= 0;
+      if (!SAFE_ID.test(String(n.id || ''))) return false;
+      if (op.table !== 'posts' && !SAFE_ID.test(String(n.pid || '')) && String(n.pid || '') !== '') return false;
+      return Object.keys(n).every(k => String(n[k] == null ? '' : n[k]).length <= 50000);
+    });
+  });
+}
+
+/* 댓글 저장: 새 댓글은 작성자·작성일을 서버가 채움. 이미 있는 댓글은 본문·작성자를 못 바꾸고
+   답글은 기존 목록에 새 것만 더함(통째로 덮어쓰지 않음 → 동시에 단 답글도 안 사라짐). 해결 표시는 댓글 권한이면 가능, 읽음 표시는 주인만 */
+function parseReps_(s) { try { const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+const cut_ = (s, n) => String(s == null ? '' : s).slice(0, n);
+function commentUpsert_(rows, n, ctx, postIds) {
+  const id = String(n.id), today = today_();
+  const newRep = r => ({ id: String(r.id), text: cut_(r.text, 5000), by: ctx.actor, at: today });
+  const inRep = parseReps_(n.replies).filter(r => r && r.id && SAFE_ID.test(String(r.id)) && String(r.text || '').trim());
+  const i = rows.findIndex(r => r.id === id);
+  if (i < 0) {
+    if (!postIds[String(n.pid)]) return;
+    const qi = String(n.qi == null ? '' : n.qi);
+    if (qi !== '' && !/^\d{1,3}$/.test(qi)) return;
+    rows.push({ id: id, pid: String(n.pid), qi: qi, quote: cut_(n.quote, 2000), text: cut_(n.text, 5000), by: ctx.actor, at: today,
+      replies: JSON.stringify(inRep.map(newRep)), resolved: '', read: ctx.owner ? 'Y' : '', ver: cut_(n.ver, 100) });
+    return;
+  }
+  const cur = rows[i], old = parseReps_(cur.replies), have = {};
+  old.forEach(r => { if (r && r.id) have[String(r.id)] = 1; });
+  const add = inRep.filter(r => !have[String(r.id)]).map(newRep);
+  const next = Object.assign({}, cur);
+  if (add.length) { next.replies = JSON.stringify(old.concat(add)); if (!ctx.owner) next.read = ''; }
+  if (n.resolved != null) next.resolved = n.resolved === 'Y' ? 'Y' : '';
+  if (ctx.owner && n.read != null) next.read = n.read === 'Y' ? 'Y' : '';
+  rows[i] = next;
 }
 
 /**
- * ops: [{op:'replace', table, key, value, rows}, {op:'upsert', table, rows, key?}, {op:'remove', table, key, value}]
+ * ops: [{op:'check', id, rev}, {op:'upsert', table, rows}, {op:'remove', table, key(id|pid|k), value}] — 형식은 validOps_ 가 먼저 검사
  * 표마다 한 번 읽고, 바꾼 뒤 한 번에 씀 (칸 하나씩 쓰지 않음)
  */
-function batch_(pl, ops) {
+function batch_(pl, ops, ctx) {
+  ctx = ctx || { owner: true, actor: pl.id };
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -446,8 +504,10 @@ function batch_(pl, ops) {
       if (op.op === 'check' || (op.unit && conflicts.indexOf(op.unit) >= 0)) return;
       const rows = get(op.table);
       if (op.table === 'posts' && op.op === 'upsert') (op.rows || []).forEach(n => { n.rev = Utilities.getUuid().slice(0, 8); revs[n.id] = n.rev; });
-      if (op.op === 'replace') {
-        cache[op.table] = rows.filter(r => r[op.key] !== String(op.value)).concat(op.rows || []);
+      if (op.table === 'comments' && op.op === 'upsert') {
+        const postIds = {};
+        get('posts').forEach(r => { postIds[r.id] = 1; });
+        (op.rows || []).forEach(n => commentUpsert_(rows, n, ctx, postIds));
       } else if (op.op === 'upsert') {
         const key = op.key || (op.table === 'settings' ? 'k' : 'id');
         (op.rows || []).forEach(n => {
@@ -518,23 +578,54 @@ function usage_(email) {
   const tUsed = Number(p.getProperty(usageKey_()) || 0), tLimit = Number(p.getProperty('DAILY_LIMIT') || 100);
   return { used: Number(p.getProperty(userKey_(email)) || 0), limit: userLimit_(reg_(), email), full: tUsed >= tLimit, hasKey: !!p.getProperty('ANTHROPIC_API_KEY') };
 }
-/* 한 번 쓸 때마다 사람·전체 횟수 +1 (날이 바뀌면 지난 기록은 지움) */
-function countUse_(email) {
+/* 날이 바뀌면 지난 횟수 기록은 지움 (잠금 안에서 부름) */
+function cleanDay_(p, day) {
+  if (p.getProperty('USAGE_DAY') === day) return;
+  const all = p.getProperties();
+  Object.keys(all).forEach(k => { if ((/^USAGE_\d{8}$/.test(k) || /^[UF]_\d{8}_/.test(k)) && k.indexOf(day) < 0) p.deleteProperty(k); });
+  p.setProperty('USAGE_DAY', day);
+}
+/* 공고 정리 1번을 Claude 호출 "전에" 잠금 안에서 미리 잡아 둠 → 동시에 여러 번 눌러도 한도를 못 넘김.
+   돌려받으면 '' , 막히면 'limit' / 'limit_total'. 호출이 실패하면 refundUse_ 로 되돌림 */
+function reserveUse_(email) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
     const p = props_(), day = dayKey_();
-    if (p.getProperty('USAGE_DAY') !== day) {
-      const all = p.getProperties();
-      Object.keys(all).forEach(k => { if ((/^USAGE_\d{8}$/.test(k) || /^U_\d{8}_/.test(k)) && k.indexOf(day) < 0) p.deleteProperty(k); });
-      p.setProperty('USAGE_DAY', day);
-    }
-    p.setProperty(usageKey_(), String(Number(p.getProperty(usageKey_()) || 0) + 1));
-    p.setProperty(userKey_(email), String(Number(p.getProperty(userKey_(email)) || 0) + 1));
+    cleanDay_(p, day);
+    const used = Number(p.getProperty(userKey_(email)) || 0), tUsed = Number(p.getProperty(usageKey_()) || 0);
+    if (used >= userLimit_(reg_(), email)) return { error: 'limit' };
+    if (tUsed >= Number(p.getProperty('DAILY_LIMIT') || 100)) return { error: 'limit_total' };
+    p.setProperty(usageKey_(), String(tUsed + 1));
+    p.setProperty(userKey_(email), String(used + 1));
+    return { day: day };
   } finally { lock.releaseLock(); }
+}
+function refundUse_(email, day) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    if (dayKey_() !== day) return;
+    const p = props_();
+    [usageKey_(), userKey_(email)].forEach(k => p.setProperty(k, String(Math.max(0, Number(p.getProperty(k) || 0) - 1))));
+  } finally { lock.releaseLock(); }
+}
+/* 이미지 주소 가져오기: 한 사람당 하루 IMG_LIMIT(기본 100)번까지 (서버를 남의 그림 받아 오는 통로로 쓰지 못하게) */
+function fetchImgFor_(email, url) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const p = props_(), day = dayKey_(), k = 'F_' + day + '_' + email, n = Number(p.getProperty(k) || 0);
+    cleanDay_(p, day);
+    if (n >= Number(p.getProperty('IMG_LIMIT') || 100)) return { ok: false, error: 'img_fetch', detail: 'limit' };
+    p.setProperty(k, String(n + 1));
+  } finally { lock.releaseLock(); }
+  return fetchImg_(url);
 }
 
 function pageText_(url) {
+  url = String(url || '');
+  if (!/^https?:\/\/[^\s]+$/i.test(url)) return '';
   const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true,
     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36', 'Accept-Language': 'ko-KR,ko;q=0.9' } });
   if (res.getResponseCode() >= 400) return '';
@@ -571,11 +662,16 @@ function fetchImg_(url) {
 }
 
 function extract_(input, email) {
-  const p = props_(), u = usage_(email);
-  const key = p.getProperty('ANTHROPIC_API_KEY');
+  const key = props_().getProperty('ANTHROPIC_API_KEY');
   if (!key) return { ok: false, error: 'no_api_key' };
-  if (u.used >= u.limit) return { ok: false, error: 'limit', usage: u };
-  if (u.full) return { ok: false, error: 'limit_total', usage: u };
+  const r = reserveUse_(email);
+  if (r.error) return { ok: false, error: r.error, usage: usage_(email) };
+  const st = { billed: false };
+  try { return extractRun_(input || {}, email, key, st); }
+  finally { if (!st.billed) refundUse_(email, r.day); } // Claude 를 실제로 부르지 못했으면 1번 돌려줌
+}
+function extractRun_(input, email, key, st) {
+  const p = props_();
 
   const content = [];
   let pageTxt = '';
@@ -656,7 +752,7 @@ function extract_(input, email) {
 
   // 비교 시험용: 정해 둔 모델 중에서만 바꿔 볼 수 있음
   const MODEL = p.getProperty('MODEL') || MODEL_DEFAULT;
-  const model = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'].indexOf(input.model) >= 0 ? input.model : MODEL;
+  const model = email === admin_() && ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'].indexOf(input.model) >= 0 ? input.model : MODEL; // 모델 바꾸기는 관리자만
   const body = {
     model: model, max_tokens: 8000,
     output_config: { effort: 'low', format: { type: 'json_schema', schema: schema } },
@@ -679,8 +775,8 @@ function extract_(input, email) {
     if (code === 400 && urlFail.length && /image|url|fetch|download/i.test(txt)) return { ok: false, error: 'img_fetch', detail: txt.slice(0, 300) };
     return { ok: false, error: code === 429 ? 'rate_limited' : code === 401 ? 'bad_api_key' : 'api_error', detail: txt.slice(0, 300) };
   }
+  st.billed = true; // 여기까지 오면 Claude 비용이 든 것 → 횟수 유지
   const msg = JSON.parse(txt);
-  countUse_(email);
   if (msg.stop_reason === 'refusal') return { ok: false, error: 'refusal' };
   if (msg.stop_reason === 'max_tokens') return { ok: false, error: 'too_long' };
   const t = (msg.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
