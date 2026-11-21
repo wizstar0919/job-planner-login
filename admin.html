@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>구직 플래너 관리자 콘솔</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<script>try{var t=JSON.parse(localStorage.getItem('jp_theme'));if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+<style>
+/* 관리자 콘솔: 앱과 같은 색 체계. 관리자(서버 주인) 계정만 서버가 응답함 */
+:root{--bg:#F4F4F5;--surface:#FFFFFF;--surface-2:#EDEDEF;--line:#DEDEE2;--fg:#18181B;--muted:#6B6B73;--accent:#0E8C6D;--accent-fg:#FFFFFF;
+  --urgent:#C4321F;--warn:#A35F00;--ok:#2A7A4B;
+  --f-body:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#111113;--surface:#1B1B1E;--surface-2:#26262A;--line:#34343A;--fg:#EDEDEF;--muted:#9C9CA4;
+  --accent:#2FD3A2;--accent-fg:#06140F;--urgent:#FF7B66;--warn:#F0B54E;--ok:#6FCB8E;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#111113;--surface:#1B1B1E;--surface-2:#26262A;--line:#34343A;--fg:#EDEDEF;--muted:#9C9CA4;
+  --accent:#2FD3A2;--accent-fg:#06140F;--urgent:#FF7B66;--warn:#F0B54E;--ok:#6FCB8E;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.5;padding:16px}
+.wrap{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+h1{font-size:20px;margin:0}
+h2{font-size:15px;margin:0 0 10px}
+.tag{font-size:12px;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--muted)}
+.grow{flex:1}
+a{color:var(--accent)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.muted{color:var(--muted)}.small{font-size:12px}
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:8px;padding:6px 12px;font:inherit;cursor:pointer;white-space:nowrap}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:600}
+.btn.danger{color:var(--urgent)}
+.btn:disabled{opacity:.5;cursor:default}
+input[type=text],input[type=number],input[type=email]{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:8px;padding:6px 8px;font:inherit;min-width:0}
+input[type=number]{width:72px}
+.stats{display:flex;gap:10px;flex-wrap:wrap}
+.stat{flex:1;min-width:150px;background:var(--surface-2);border-radius:10px;padding:10px 12px}
+.stat .v{font-size:22px;font-weight:700}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th,.tbl td{text-align:left;padding:8px 6px;border-top:1px solid var(--line);vertical-align:middle}
+.tbl th{font-size:12px;color:var(--muted);font-weight:500;border-top:none}
+.who b{display:block}
+.st{font-size:12px;padding:2px 8px;border-radius:999px;background:var(--surface-2);white-space:nowrap}
+.st.wait{color:var(--warn);font-weight:600}.st.no{color:var(--urgent)}.st.ok{color:var(--ok)}
+.acts{display:flex;gap:6px;flex-wrap:wrap}
+.center{min-height:70vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center}
+.gbtn{display:flex;justify-content:center;min-height:44px;color-scheme:light}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:13px;max-width:90vw}
+@media (max-width:640px){
+  .tbl thead{display:none}
+  .tbl tr{display:block;border-top:1px solid var(--line);padding:8px 0}
+  .tbl td{display:block;border:none;padding:3px 0}
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="root"></div>
+<script>
+(()=>{
+const GOOGLE_CLIENT_ID='405546328317-siu1ah5girrbl1o2us9rtls4eafpn8eh.apps.googleusercontent.com';/* 공개 값 */
+const DEFAULT_SERVER='https://script.google.com/macros/s/AKfycbxpOGnj0TBYyWTAGF3CcUr-0ozCYzf6fIAUO87M5jZ-R2T9gB-10v3gAQ7_90mrlRoG/exec';
+/* 앱과 같은 로그인 정보를 씀 (같은 주소라 앱에서 로그인했으면 바로 들어옴) */
+const LS={get(k,d){try{const v=localStorage.getItem('jpl_'+k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('jpl_'+k,JSON.stringify(v))}catch(e){}}};
+const cfg=Object.assign({server:'',sess:'',email:''},LS.get('cfg',{}));if(!cfg.server)cfg.server=DEFAULT_SERVER;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const root=document.getElementById('root');
+let D=null,view='load',err='',busy='';
+const ERR={network:'인터넷 연결을 확인해 주세요',auth:'다시 로그인해 주세요',forbidden:'관리자만 볼 수 있어요',login_failed:'구글 로그인을 확인하지 못했어요',
+  bad_email:'이메일 주소를 확인해 주세요',bad_number:'숫자(0~9999)로 적어 주세요',has_planner:'그 사람은 이미 자기 플래너가 있어요',not_found:'플래너를 찾을 수 없어요'};
+const msg=e=>ERR[e&&e.code]||('문제가 생겼어요 ('+((e&&e.code)||'알 수 없음')+')');
+function toast(m){const o=document.querySelector('.toast');if(o)o.remove();const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
+async function api(action,body){
+  let res;try{res=await fetch(cfg.server,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({sess:cfg.sess,action},body||{}))})}catch(e){throw {code:'network'}}
+  let j;try{j=await res.json()}catch(e){throw {code:'bad_response'}}
+  if(!j.ok)throw {code:j.error||'error'};return j}
+
+function head(){return `<header><h1>🛠 관리자 콘솔</h1><span class="tag">구직 플래너 로그인 시험판</span><span class="grow"></span>
+  ${cfg.email?`<span class="muted small">${esc(cfg.email)}</span>`:''}<a href="./">← 앱으로</a></header>`}
+function render(){
+  if(view==='login'){root.innerHTML=head()+`<div class="center"><b>관리자 계정으로 로그인해 주세요</b><div class="gbtn" id="gbtn"></div><span class="small" style="color:var(--urgent)">${esc(err)}</span></div>`;mountGoogle();return}
+  if(view==='denied'){root.innerHTML=head()+`<div class="center"><b>관리자만 볼 수 있는 화면이에요</b><span class="muted">${esc(cfg.email)} 은 관리자 계정이 아니에요</span><a href="./">앱으로 돌아가기</a></div>`;return}
+  if(view==='load'||!D){root.innerHTML=head()+`<div class="center muted">${esc(err||'불러오는 중…')}</div>`;return}
+  const ord={'대기':0,'승인':1,'거절':2},cls={'승인':'ok','대기':'wait','거절':'no'};
+  const ms=D.members.slice().sort((a,b)=>(a.admin?-1:b.admin?1:0)||(ord[a.status]-ord[b.status])||String(b.joined||'').localeCompare(String(a.joined||'')));
+  const wait=ms.filter(m=>m.status==='대기').length;
+  const mRow=m=>`<tr><td class="who"><b>${esc(m.name||m.email.split('@')[0])}${m.admin?' (나)':''}</b><span class="muted small">${esc(m.email)}</span></td>
+    <td><span class="st ${cls[m.status]||''}">${m.admin?'관리자':esc(m.status||'-')}</span></td>
+    <td>${m.planner?esc(m.planner):'<span class="muted">-</span>'}</td>
+    <td class="small">${esc(m.joined||'-')}</td>
+    <td><div class="row"><span>${m.used} /</span><input type="number" min="0" max="9999" value="${esc(m.custom)}" placeholder="${D.userLimit}" data-lim="${esc(m.email)}" aria-label="${esc(m.email)} 하루 한도" title="비우면 기본 한도(${D.userLimit}번)"></div></td>
+    <td><div class="acts">${m.admin?'':[m.status!=='승인'?`<button class="btn primary" data-act="approve" data-em="${esc(m.email)}" data-v="승인">승인</button>`:'',
+      m.status!=='거절'?`<button class="btn danger" data-act="approve" data-em="${esc(m.email)}" data-v="거절">${m.status==='승인'?'이용 중지':'거절'}</button>`:''].join('')}</div></td></tr>`;
+  const pRow=p=>`<tr><td><b>${esc(p.name)}</b> <span class="muted small">${esc(p.id)}</span></td>
+    <td>${p.owner?esc(p.owner):'<span class="st wait">주인 없음</span>'}</td><td class="small">${esc(p.created||'-')}</td><td>${p.shares}명</td>
+    <td><div class="row"><input type="email" placeholder="새 주인 이메일" data-own="${esc(p.id)}" aria-label="${esc(p.name)} 새 주인 이메일"><button class="btn" data-act="owner" data-v="${esc(p.id)}">주인 바꾸기</button></div></td></tr>`;
+  root.innerHTML=head()+`
+  <section class="card"><h2>오늘 공고 정리 사용량</h2>
+   <div class="stats"><div class="stat"><div class="muted small">서버 전체 (안전장치)</div><div class="v">${D.total.used} <span class="muted small">/ ${D.total.limit}번</span></div></div>
+    <div class="stat"><div class="muted small">한 사람당 기본 한도</div><div class="v">${D.userLimit}<span class="muted small">번 / 하루</span></div></div>
+    <div class="stat"><div class="muted small">Claude API 키</div><div class="v small" style="font-size:15px">${D.hasKey?'연결됨 ✅':'아직 없음'}</div></div></div>
+   <div class="row" style="margin-top:12px"><span class="small">한 사람당</span><input type="number" id="dUser" min="0" max="9999" value="${D.userLimit}" aria-label="한 사람당 기본 한도"><span class="small">번 · 서버 전체</span><input type="number" id="dTotal" min="0" max="9999" value="${D.total.limit}" aria-label="서버 전체 한도"><span class="small">번</span><button class="btn" data-act="defaults" ${busy?'disabled':''}>저장</button></div>
+   <div class="muted small" style="margin-top:6px">매일 0시(한국 시간)에 다시 0부터 셉니다. 사람별로 다르게 하려면 아래 회원 표의 칸에 숫자를 넣고 칸 밖을 누르세요(비우면 기본 한도).</div></section>
+  <section class="card"><h2>회원 <span class="muted small">${ms.length}명${wait?` · <b style="color:var(--warn)">승인 대기 ${wait}명</b>`:''}</span></h2>
+   <div class="muted small" style="margin-bottom:6px">처음 로그인한 사람은 '대기'로 들어와요. 승인하면 자기 플래너가 생기고 공고 정리도 쓸 수 있어요. 플래너 주인과 공유받은 사람은 자동 승인이고, '거절'·'이용 중지'면 전부 막혀요. 다른 사람 플래너의 내용은 이 화면에 나오지 않아요.</div>
+   <table class="tbl"><thead><tr><th>사람</th><th>상태</th><th>플래너</th><th>가입일</th><th>오늘 사용 / 한도</th><th></th></tr></thead><tbody>${ms.map(mRow).join('')}</tbody></table></section>
+  <section class="card"><h2>플래너</h2>
+   <table class="tbl"><thead><tr><th>이름</th><th>주인</th><th>만든 날</th><th>공유</th><th></th></tr></thead><tbody>${D.planners.map(pRow).join('')}</tbody></table>
+   <div class="muted small" style="margin-top:6px">주인을 바꾸면 그 플래너는 새 주인 것이 됩니다. 이미 자기 플래너가 있는 사람은 주인으로 지정할 수 없어요.</div></section>
+  <div class="row"><button class="btn" data-act="reload">새로 고침</button><span class="grow"></span><button class="btn danger" data-act="logout">이 기기에서 로그아웃</button></div>`;
+}
+async function load(){view='load';err='';render();
+  try{D=await api('adminInfo');view='main'}
+  catch(e){if(e.code==='auth'){cfg.sess='';LS.set('cfg',cfg);view='login'}else if(e.code==='forbidden')view='denied';else{err=msg(e)}}
+  render()}
+async function act(action,body,ok){if(busy)return;busy=action;
+  try{D=await api(action,body);toast(ok)}catch(e){toast(msg(e))}busy='';render()}
+let gisLoading=false;
+function mountGoogle(){
+  const draw=()=>{try{google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:onCred,auto_select:false});
+    const b=document.getElementById('gbtn');if(b){b.innerHTML='';const dark=document.documentElement.dataset.theme?document.documentElement.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
+      google.accounts.id.renderButton(b,{theme:dark?'filled_black':'outline',size:'large',shape:'pill',text:'signin_with',locale:'ko',width:260})}}catch(e){}};
+  if(window.google&&google.accounts&&google.accounts.id){draw();return}
+  if(gisLoading)return;gisLoading=true;
+  const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.async=true;s.onload=draw;
+  s.onerror=()=>{gisLoading=false;err='구글 로그인 버튼을 불러오지 못했어요';render()};document.head.appendChild(s)}
+async function onCred(resp){err='';
+  try{const j=await api('login',{idToken:resp&&resp.credential});cfg.sess=j.sess;cfg.email=j.email;LS.set('cfg',cfg);load()}
+  catch(e){err=msg(e);render()}}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
+  if(a==='reload')load();
+  if(a==='logout'){cfg.sess='';cfg.email='';LS.set('cfg',cfg);try{localStorage.removeItem('jpl_cache')}catch(x){}view='login';render()}
+  if(a==='approve'){const em=t.dataset.em,v=t.dataset.v;act('approve',{email:em,status:v},`${em} → ${v==='거절'?'막음':'승인'}`)}
+  if(a==='defaults'){act('setDefaults',{userLimit:document.getElementById('dUser').value.trim(),total:document.getElementById('dTotal').value.trim()},'한도를 저장했어요')}
+  if(a==='owner'){const pid=t.dataset.v,el=[...document.querySelectorAll('[data-own]')].find(x=>x.dataset.own===pid),em=(el&&el.value||'').trim();
+    if(!em){toast('새 주인 이메일을 적어 주세요');return}act('setOwner',{pid,email:em},'주인을 바꿨어요')}
+});
+document.addEventListener('change',e=>{const el=e.target;if(el.dataset.lim==null)return;
+  act('setLimit',{email:el.dataset.lim,limit:el.value.trim()},el.value.trim()?`${el.dataset.lim} 하루 ${el.value.trim()}번`:`${el.dataset.lim} 기본 한도로`)});
+if(cfg.sess)load();else{view='login';render()}
+})();
+</script>
+</body>
+</html>

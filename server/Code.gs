@@ -2,20 +2,22 @@
  * 구직 플래너 서버 — 구글 로그인 + 노션식 공유 권한 (시험판)
  * - 로그인: 앱이 구글 로그인 확인증(ID 토큰)을 보내면 서버가 구글에 진짜인지 확인 → 30일짜리 서버 출입증(세션) 발급
  * - 플래너: 사람마다 하나 (처음 로그인하면 자동 생성). 데이터는 플래너마다 구글 시트 하나
- * - 권한: 주인 / 전체 허용(편집·댓글·공유) / 편집 허용 / 댓글 허용 / 읽기 허용. 모든 요청에서 서버가 권한을 확인
+ * - 권한: 주인(자기 플래너만 수정·공유) / 댓글 허용 / 읽기 허용. 남의 플래너는 고칠 수 없음. 모든 요청에서 서버가 권한을 확인
+ * - 가입 승인 · 사람별 하루 공고 정리 한도 · 관리자 콘솔(admin.html)용 요청은 관리자(서버 주인)만
  * - 플래너 목록·공유 목록 = "구직 플래너(로그인) 관리" 시트 (민석님이 직접 열어 고칠 수도 있음)
  *
  * 스크립트 속성 (자동 생성)
  *   REG_SHEET          관리 시트 id
  *   SESSION_SECRET     세션 서명용 비밀 값
  *   ANTHROPIC_API_KEY  Claude API 키 (민석님이 직접 입력)
- *   DAILY_LIMIT        공고 정리 하루 한도 (기본 30)
+ *   DAILY_LIMIT        공고 정리 서버 전체 하루 한도 (기본 100, 안전장치)
+ *   USER_LIMIT         공고 정리 한 사람당 하루 한도 (기본 20, 회원 탭 '하루 한도' 칸으로 사람별 변경)
  */
 
 const CLIENT_ID = '405546328317-siu1ah5girrbl1o2us9rtls4eafpn8eh.apps.googleusercontent.com'; // 공개 값 (구글 로그인 이름표)
 const MODEL_DEFAULT = 'claude-haiku-5-5';
 const RANK = { read: 1, comment: 2, edit: 3, full: 4, owner: 5 };
-const SHARE_ROLES = ['full', 'edit', 'comment', 'read'];
+const SHARE_ROLES = ['comment', 'read'];
 const SESSION_DAYS = 30;
 
 const SCHEMA = {
@@ -35,7 +37,7 @@ const SCHEMA = {
 const REG = {
   planners: { tab: '플래너', cols: [['id','플래너 id'],['name','이름'],['owner','주인 이메일'],['sheet','데이터 시트 id'],['created','만든 날']] },
   shares: { tab: '공유', cols: [['pid','플래너 id'],['email','이메일'],['role','권한'],['by','공유한 사람'],['at','공유한 날']] },
-  members: { tab: '회원', cols: [['email','이메일'],['name','이름'],['status','상태'],['joined','가입일'],['decided','처리일']] }
+  members: { tab: '회원', cols: [['email','이메일'],['name','이름'],['status','상태'],['joined','가입일'],['decided','처리일'],['limit','하루 한도']] }
 };
 /* 가입 승인: 관리자(서버 주인)·플래너 주인·공유받은 사람은 자동 승인, 그 밖의 새 사람은 '대기' → 관리자가 승인. '거절'이면 전부 막힘 */
 const ST = { ok: '승인', wait: '대기', no: '거절' };
@@ -43,6 +45,7 @@ const ST = { ok: '승인', wait: '대기', no: '거절' };
 /* ---------- 진입점 ---------- */
 function doGet() {
   const r = ensureInit_();
+  migrate_();
   return out_({ ok: true, app: 'job-planner-login', msg: '구직 플래너(로그인 시험판) 서버가 동작 중이에요.', init: r });
 }
 
@@ -51,6 +54,7 @@ function doPost(e) {
   try { req = JSON.parse(e.postData.contents); } catch (err) { return out_({ ok: false, error: 'bad_request' }); }
   try {
     ensureInit_();
+    migrate_();
     if (req.action === 'login') return out_(login_(req.idToken));
     const email = checkSession_(req.sess);
     if (!email) return out_({ ok: false, error: 'auth' });
@@ -59,10 +63,10 @@ function doPost(e) {
       case 'batch': return out_(batchFor_(email, String(req.pid || ''), req.ops || []));
       case 'share': return out_(share_(email, String(req.pid || ''), req.emails || [], String(req.role || '')));
       case 'setRole': return out_(setRole_(email, String(req.pid || ''), String(req.email || ''), String(req.role || '')));
-      case 'extract': return out_(approved_(email) ? extract_(req.input || {}) : { ok: false, error: 'forbidden' });
+      case 'extract': return out_(approved_(email) ? extract_(req.input || {}, email) : { ok: false, error: 'forbidden' });
       case 'fetchImg': return out_(approved_(email) ? fetchImg_(req.url) : { ok: false, error: 'forbidden' });
-      case 'members': return out_(email === admin_() ? { ok: true, members: members_(reg_()) } : { ok: false, error: 'forbidden' });
-      case 'approve': return out_(email === admin_() ? approve_(email, normEmail_(req.email), String(req.status || '')) : { ok: false, error: 'forbidden' });
+      case 'adminInfo': case 'approve': case 'setLimit': case 'setDefaults': case 'setOwner':
+        return out_(email === admin_() ? adminAct_(email, req) : { ok: false, error: 'forbidden' });
       default: return out_({ ok: false, error: 'unknown_action' });
     }
   } catch (err) {
@@ -154,7 +158,8 @@ function roleOf_(reg, email, pid) {
   if (!pl) return '';
   if (pl.owner && pl.owner === email) return 'owner';
   const s = reg.shares.find(x => x.pid === pid && x.email === email);
-  return s && RANK[s.role] ? s.role : '';
+  if (!s || !RANK[s.role]) return '';
+  return s.role === 'full' || s.role === 'edit' ? 'comment' : s.role; // 예전 권한은 댓글 허용으로
 }
 
 /* ---------- 가입 승인 ---------- */
@@ -175,33 +180,105 @@ function status_(reg, email) {
 }
 function approved_(email) { return status_(reg_(), email) === ST.ok; }
 function members_(reg) {
-  return reg.members.map(m => ({ email: m.email, name: m.name, status: status_(reg, m.email), joined: m.joined, decided: m.decided, admin: m.email === admin_() }));
+  const p = props_(), admin = admin_(), list = reg.members.slice();
+  if (admin && !list.some(m => m.email === admin)) {
+    const pl = reg.planners.find(x => x.owner === admin);
+    list.unshift({ email: admin, name: pl ? pl.name : admin.split('@')[0], joined: '', decided: '', limit: '' });
+  }
+  return list.map(m => ({ email: m.email, name: m.name, status: status_(reg, m.email), joined: m.joined, decided: m.decided,
+    admin: m.email === admin, limit: userLimit_(reg, m.email), custom: String(m.limit || '').trim(),
+    used: Number(p.getProperty(userKey_(m.email)) || 0), planner: (reg.planners.find(x => x.owner === m.email) || {}).name || '' }));
 }
 /* 회원 목록에 기록 (처음 로그인할 때) */
 function addMember_(email, name, status) {
+  editReg_(reg => {
+    if (reg.members.some(x => x.email === email)) return;
+    reg.members.push({ email: email, name: String(name).slice(0, 30), status: status, joined: today_(), decided: status === ST.ok ? today_() : '', limit: '' });
+  });
+}
+/* 관리 시트를 잠그고 고친 뒤 저장 (fn 이 error 를 돌려주면 저장 안 함) */
+function editReg_(fn) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
     CacheService.getScriptCache().remove('reg');
     const reg = reg_();
-    if (reg.members.some(x => x.email === email)) return;
-    reg.members.push({ email: email, name: String(name).slice(0, 30), status: status, joined: today_(), decided: status === ST.ok ? today_() : '' });
+    const r = fn(reg);
+    if (r && r.error) return r;
     saveReg_(reg);
+    return r;
   } finally { lock.releaseLock(); }
 }
-function approve_(admin, target, status) {
-  if (!isEmail_(target) || target === admin) return { ok: false, error: 'bad_email' };
-  if ([ST.ok, ST.no, ST.wait].indexOf(status) < 0) return { ok: false, error: 'bad_role' };
+function memberRow_(reg, email) {
+  let m = reg.members.find(x => x.email === email);
+  if (!m) { m = { email: email, name: email.split('@')[0], status: '', joined: today_(), decided: '', limit: '' }; reg.members.push(m); }
+  return m;
+}
+/* ---------- 관리자 콘솔 ---------- */
+function adminAct_(admin, req) {
+  const p = props_();
+  if (req.action === 'approve') {
+    const target = normEmail_(req.email), status = String(req.status || '');
+    if (!isEmail_(target) || target === admin) return { ok: false, error: 'bad_email' };
+    if ([ST.ok, ST.no, ST.wait].indexOf(status) < 0) return { ok: false, error: 'bad_role' };
+    editReg_(reg => { const m = memberRow_(reg, target); m.status = status; m.decided = today_(); });
+  } else if (req.action === 'setLimit') {
+    const target = normEmail_(req.email), v = String(req.limit == null ? '' : req.limit).trim();
+    if (!isEmail_(target)) return { ok: false, error: 'bad_email' };
+    if (v !== '' && !/^\d{1,4}$/.test(v)) return { ok: false, error: 'bad_number' };
+    editReg_(reg => { memberRow_(reg, target).limit = v; });
+  } else if (req.action === 'setDefaults') {
+    const u = String(req.userLimit == null ? '' : req.userLimit), t = String(req.total == null ? '' : req.total);
+    if (!/^\d{1,4}$/.test(u) || !/^\d{1,4}$/.test(t)) return { ok: false, error: 'bad_number' };
+    p.setProperty('USER_LIMIT', u); p.setProperty('DAILY_LIMIT', t);
+  } else if (req.action === 'setOwner') {
+    const pid = String(req.pid || ''), target = normEmail_(req.email);
+    if (!isEmail_(target)) return { ok: false, error: 'bad_email' };
+    const r = editReg_(reg => {
+      const pl = reg.planners.find(x => x.id === pid);
+      if (!pl) return { ok: false, error: 'not_found' };
+      if (reg.planners.some(x => x.owner === target && x.id !== pid)) return { ok: false, error: 'has_planner' };
+      pl.owner = target;
+      reg.shares = reg.shares.filter(x => !(x.pid === pid && x.email === target));
+    });
+    if (r && r.error) return r;
+  }
+  return adminInfo_();
+}
+function adminInfo_() {
+  CacheService.getScriptCache().remove('reg');
+  const reg = reg_(), p = props_();
+  return { ok: true, admin: admin_(), members: members_(reg),
+    planners: reg.planners.map(pl => ({ id: pl.id, name: pl.name, owner: pl.owner, created: pl.created, shares: reg.shares.filter(x => x.pid === pl.id).length })),
+    total: { used: Number(p.getProperty(usageKey_()) || 0), limit: Number(p.getProperty('DAILY_LIMIT') || 100) },
+    userLimit: Number(p.getProperty('USER_LIMIT') || 20), hasKey: !!p.getProperty('ANTHROPIC_API_KEY') };
+}
+/* 한 번만: 예전 권한(전체·편집) → 댓글 허용, 건희 플래너 주인 지정(Local.gs 의 GH_OWNER), 한도 기본값 */
+function migrate_() {
+  const p = props_();
+  if (p.getProperty('MIGRATE_V') === '2') return;
   const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
+  lock.waitLock(30000);
   try {
+    if (p.getProperty('MIGRATE_V') === '2') return;
     CacheService.getScriptCache().remove('reg');
-    const reg = reg_();
-    const m = reg.members.find(x => x.email === target);
-    if (m) { m.status = status; m.decided = today_(); }
-    else reg.members.push({ email: target, name: target.split('@')[0], status: status, joined: today_(), decided: today_() });
+    const reg = reg_(), admin = admin_();
+    reg.shares.forEach(x => { if (x.role === 'full' || x.role === 'edit') x.role = 'comment'; });
+    const gh = typeof GH_OWNER !== 'undefined' ? normEmail_(GH_OWNER) : '';
+    const pl = reg.planners.find(x => x.id === 'gh');
+    if (gh && pl && !pl.owner && !reg.planners.some(x => x.owner === gh)) {
+      pl.owner = gh;
+      reg.shares = reg.shares.filter(x => !(x.pid === 'gh' && x.email === gh));
+      const m = memberRow_(reg, gh);
+      if (m.status !== ST.no) { m.status = ST.ok; m.decided = today_(); if (!m.name || m.name === gh.split('@')[0]) m.name = pl.name; }
+      // 예전 앱처럼 서로 보기 + 댓글: 민석 플래너를 건희에게 댓글 허용으로 공유
+      const mine = reg.planners.find(x => x.owner === admin);
+      if (mine && !reg.shares.some(x => x.pid === mine.id && x.email === gh)) reg.shares.push({ pid: mine.id, email: gh, role: 'comment', by: admin, at: today_() });
+    }
     saveReg_(reg);
-    return { ok: true, members: members_(reg) };
+    if (Number(p.getProperty('DAILY_LIMIT') || 0) < 100) p.setProperty('DAILY_LIMIT', '100');
+    if (!p.getProperty('USER_LIMIT')) p.setProperty('USER_LIMIT', '20');
+    p.setProperty('MIGRATE_V', '2');
   } finally { lock.releaseLock(); }
 }
 
@@ -260,7 +337,7 @@ function ensurePlanner_(email, name) {
 function loadFor_(email) {
   let reg = reg_();
   const st = status_(reg, email) || ST.wait;
-  if (st !== ST.ok) return { ok: true, meta: { email: email, me: '', names: {}, planners: [], status: st }, data: {}, usage: usage_(), sheets: {} };
+  if (st !== ST.ok) return { ok: true, meta: { email: email, me: '', names: {}, planners: [], status: st }, data: {}, usage: usage_(email), sheets: {} };
   if (!reg.planners.some(x => x.owner === email)) {
     const m = reg.members.find(x => x.email === email);
     ensurePlanner_(email, (m && m.name) || email.split('@')[0]);
@@ -271,7 +348,7 @@ function loadFor_(email) {
   const data = {}, sheets = {};
   acc.forEach(x => {
     data[x.pl.id] = loadAll_(x.pl);
-    if (x.role === 'owner') sheets[x.pl.id] = 'https://docs.google.com/spreadsheets/d/' + x.pl.sheet + '/edit';
+    if (x.role === 'owner' && email === admin_()) sheets[x.pl.id] = 'https://docs.google.com/spreadsheets/d/' + x.pl.sheet + '/edit';
   });
   // 댓글 쓴 사람 이름을 보여 주려고: 내가 볼 수 있는 플래너에 관련된 사람들의 플래너 이름만
   const people = {};
@@ -283,8 +360,8 @@ function loadFor_(email) {
     email: email, me: mine ? mine.pl.id : '', names: names, status: st,
     planners: acc.map(x => plannerMeta_(reg, x.pl, x.role))
   };
-  if (email === admin_()) { meta.admin = true; meta.pending = members_(reg).filter(m => m.status === ST.wait).length; }
-  return { ok: true, meta: meta, data: data, usage: usage_(), sheets: sheets };
+  if (email === admin_()) { meta.admin = true; meta.pending = reg.members.filter(m => status_(reg, m.email) === ST.wait).length; }
+  return { ok: true, meta: meta, data: data, usage: usage_(email), sheets: sheets };
 }
 function plannerMeta_(reg, pl, role) {
   const nameOf = e => { const o = reg.planners.find(x => x.owner === e); return o ? o.name : ''; };
@@ -341,8 +418,8 @@ function writeTable_(b, table, rows) { writeDef_(b, SCHEMA[table], rows); }
 function batchFor_(email, pid, ops) {
   const reg = reg_(), role = roleOf_(reg, email, pid);
   if (!role) return { ok: false, error: 'forbidden' };
-  if (RANK[role] < RANK.edit) {
-    // 댓글 허용: 댓글 표에 쓰기만. 읽기 허용: 아무것도 못 씀
+  if (role !== 'owner') {
+    // 남의 플래너: 댓글 허용이면 댓글 표에 쓰기만. 읽기 허용이면 아무것도 못 씀
     const onlyComments = RANK[role] >= RANK.comment && ops.every(op => op.table === 'comments' && op.op === 'upsert');
     if (!onlyComments) return { ok: false, error: 'forbidden' };
   }
@@ -419,7 +496,7 @@ function editShares_(email, pid, fn, selfLeave) {
     CacheService.getScriptCache().remove('reg');
     const reg = reg_(), role = roleOf_(reg, email, pid);
     if (!role) return { ok: false, error: 'forbidden' };
-    if (RANK[role] < RANK.full && !(selfLeave)) return { ok: false, error: 'forbidden' }; // 나가기는 누구나
+    if (role !== 'owner' && !selfLeave) return { ok: false, error: 'forbidden' }; // 공유 설정은 주인만, 나가기는 누구나
     fn(reg);
     saveReg_(reg);
     const pl = reg.planners.find(x => x.id === pid);
@@ -429,10 +506,32 @@ function editShares_(email, pid, fn, selfLeave) {
 }
 
 /* ---------- 공고 자동 정리 ---------- */
-function usageKey_() { return 'USAGE_' + Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyyMMdd'); }
-function usage_() {
+function dayKey_() { return Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyyMMdd'); }
+function usageKey_() { return 'USAGE_' + dayKey_(); }              // 서버 전체
+function userKey_(email) { return 'U_' + dayKey_() + '_' + email; } // 한 사람
+function userLimit_(reg, email) {
+  const m = reg.members.find(x => x.email === email), v = m ? String(m.limit || '').trim() : '';
+  return /^\d+$/.test(v) ? Number(v) : Number(props_().getProperty('USER_LIMIT') || 20);
+}
+function usage_(email) {
   const p = props_();
-  return { used: Number(p.getProperty(usageKey_()) || 0), limit: Number(p.getProperty('DAILY_LIMIT') || 30), hasKey: !!p.getProperty('ANTHROPIC_API_KEY') };
+  const tUsed = Number(p.getProperty(usageKey_()) || 0), tLimit = Number(p.getProperty('DAILY_LIMIT') || 100);
+  return { used: Number(p.getProperty(userKey_(email)) || 0), limit: userLimit_(reg_(), email), full: tUsed >= tLimit, hasKey: !!p.getProperty('ANTHROPIC_API_KEY') };
+}
+/* 한 번 쓸 때마다 사람·전체 횟수 +1 (날이 바뀌면 지난 기록은 지움) */
+function countUse_(email) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const p = props_(), day = dayKey_();
+    if (p.getProperty('USAGE_DAY') !== day) {
+      const all = p.getProperties();
+      Object.keys(all).forEach(k => { if ((/^USAGE_\d{8}$/.test(k) || /^U_\d{8}_/.test(k)) && k.indexOf(day) < 0) p.deleteProperty(k); });
+      p.setProperty('USAGE_DAY', day);
+    }
+    p.setProperty(usageKey_(), String(Number(p.getProperty(usageKey_()) || 0) + 1));
+    p.setProperty(userKey_(email), String(Number(p.getProperty(userKey_(email)) || 0) + 1));
+  } finally { lock.releaseLock(); }
 }
 
 function pageText_(url) {
@@ -471,11 +570,12 @@ function fetchImg_(url) {
   } catch (e) { return { ok: false, error: 'img_fetch', detail: String(e).slice(0, 120) }; }
 }
 
-function extract_(input) {
-  const p = props_(), u = usage_();
+function extract_(input, email) {
+  const p = props_(), u = usage_(email);
   const key = p.getProperty('ANTHROPIC_API_KEY');
   if (!key) return { ok: false, error: 'no_api_key' };
   if (u.used >= u.limit) return { ok: false, error: 'limit', usage: u };
+  if (u.full) return { ok: false, error: 'limit_total', usage: u };
 
   const content = [];
   let pageTxt = '';
@@ -580,7 +680,7 @@ function extract_(input) {
     return { ok: false, error: code === 429 ? 'rate_limited' : code === 401 ? 'bad_api_key' : 'api_error', detail: txt.slice(0, 300) };
   }
   const msg = JSON.parse(txt);
-  p.setProperty(usageKey_(), String(u.used + 1));
+  countUse_(email);
   if (msg.stop_reason === 'refusal') return { ok: false, error: 'refusal' };
   if (msg.stop_reason === 'max_tokens') return { ok: false, error: 'too_long' };
   const t = (msg.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
@@ -588,6 +688,6 @@ function extract_(input) {
   try { data = JSON.parse(t); } catch (e) { return { ok: false, error: 'parse_error' }; }
   // 못 읽었으면 다음 단계(확인 화면)로 넘기지 않음. 회사·직무가 둘 다 비어도 못 읽은 것으로 봄
   if (data.readable === false || (!String(data.co || '').trim() && !String(data.role || '').trim() && !String(data.job || '').trim() && !(data.positions || []).length))
-    return { ok: false, error: 'unreadable', detail: String(data.unreadable_reason || '').slice(0, 200), usage: usage_() };
-  return { ok: true, data: data, usage: usage_() };
+    return { ok: false, error: 'unreadable', detail: String(data.unreadable_reason || '').slice(0, 200), usage: usage_(email) };
+  return { ok: true, data: data, usage: usage_(email) };
 }

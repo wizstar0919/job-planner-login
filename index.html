@@ -378,9 +378,10 @@ mark.on{background:var(--hl-on)}
 .sh-menu button.cur b::after{content:' ✓';color:var(--accent)}
 .sh-menu .rm{color:var(--urgent);border-top:1px solid var(--line);border-radius:0 0 8px 8px;margin-top:4px}
 .sh-gen{display:flex;align-items:center;gap:10px;padding:8px 2px}
-.mem-st{font-size:12px;padding:2px 8px;border-radius:999px;background:var(--surface-2);white-space:nowrap}
-.mem-st.wait{color:#B7791F}.mem-st.no{color:var(--urgent)}.mem-st.ok{color:#2F855A}
-.sh-row .btn.sm{flex:none}
+.acct-row{display:flex;align-items:stretch;gap:6px}
+.acct-row>button{flex:1;min-width:0}
+.menu-list .ovl-tg{flex:none;white-space:nowrap;font-size:12px;font-weight:400;padding:8px 10px;color:var(--muted)}
+.dlg-b a.btn{align-self:flex-start;text-decoration:none}
 
 /* ---- 실제 앱용 덮어쓰기 ---- */
 html,body{margin:0}
@@ -673,6 +674,7 @@ const diff=s=>Math.round((dt(s)-T0)/864e5);
 const md=s=>{if(!s)return '';const d=dt(s);if(isNaN(d))return s;return (d.getMonth()+1)+'/'+d.getDate()+'('+WD[d.getDay()]+')'};
 const ddL=n=>n===0?'D-day':n>0?'D-'+n:'D+'+(-n);
 const ddC=n=>n<=1?'urgent':n<=3?'warn':'';
+const okUrl=u=>/^https?:\/\/[^\s]+$/i.test(String(u||'').trim()); /* javascript: 같은 주소는 링크로 걸지 않음 */
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const KIND={due:['📝','서류 마감'],sub:['📤','제출'],apt:['🧠','인적성·AI역량'],int:['🎤','면접'],ann:['📢','결과 발표'],etc:['•','기타']};
@@ -697,8 +699,8 @@ const GOOGLE_CLIENT_ID='405546328317-siu1ah5girrbl1o2us9rtls4eafpn8eh.apps.googl
 const DEFAULT_SERVER='https://script.google.com/macros/s/AKfycbxpOGnj0TBYyWTAGF3CcUr-0ozCYzf6fIAUO87M5jZ-R2T9gB-10v3gAQ7_90mrlRoG/exec';
 /* 권한: 주인 > 전체 허용 > 편집 허용 > 댓글 허용 > 읽기 허용 (노션과 같음) */
 const RANK={read:1,comment:2,edit:3,full:4,owner:5};
-const ROLES=[['full','전체 허용','편집하고 댓글을 달고 다른 사람에게 공유할 수 있어요'],['edit','편집 허용','편집, 댓글 달기'],['comment','댓글 허용','자소서 문장·공고에 댓글 달기'],['read','읽기 허용','보기만 할 수 있어요']];
-const ROLE_NAME=Object.assign({owner:'주인'},Object.fromEntries(ROLES.map(r=>[r[0],r[1]])));
+const ROLES=[['comment','댓글 허용','보기 + 자소서 문장·공고에 댓글·답글 달기'],['read','읽기 허용','보기만 할 수 있어요']];
+const ROLE_NAME=Object.assign({owner:'주인',full:'댓글 허용',edit:'댓글 허용'},Object.fromEntries(ROLES.map(r=>[r[0],r[1]])));
 const ICON={
   cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
   home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
@@ -831,7 +833,7 @@ async function refresh(quiet){
 }
 function errMsg(e){const c=e&&e.code;return {network:'인터넷 연결을 확인해 주세요',auth:'다시 로그인해 주세요',login_failed:'구글 로그인을 확인하지 못했어요. 다시 시도해 주세요',forbidden:'권한이 없어요',
   bad_email:'이메일 주소를 확인해 주세요'+(e&&e.detail?' ('+e.detail+')':''),bad_role:'권한 종류가 잘못됐어요',no_server:'서버 주소가 없어요',
-  no_api_key:'공고 정리용 API 키가 아직 연결되지 않았어요',limit:'오늘 공고 정리 한도를 다 썼어요',need_capture:'링크로 내용을 읽을 수 없는 사이트예요. 캡처를 올려 주세요',img_fetch:'이미지 주소에서 그림을 가져오지 못했어요. 캡처로 올려 주세요',unreadable:'공고를 읽지 못했어요. 글자가 잘 보이게 다시 캡처하거나 본문을 붙여넣어 주세요',
+  no_api_key:'공고 정리용 API 키가 아직 연결되지 않았어요',limit:'오늘 공고 정리 한도(한 사람당 하루)를 다 썼어요. 내일 다시 쓸 수 있어요',limit_total:'오늘 서버 전체 공고 정리 한도를 다 썼어요. 내일 다시 써 주세요',need_capture:'링크로 내용을 읽을 수 없는 사이트예요. 캡처를 올려 주세요',img_fetch:'이미지 주소에서 그림을 가져오지 못했어요. 캡처로 올려 주세요',unreadable:'공고를 읽지 못했어요. 글자가 잘 보이게 다시 캡처하거나 본문을 붙여넣어 주세요',
   refusal:'이 공고는 정리할 수 없었어요. 직접 입력해 주세요',rate_limited:'요청이 많아요. 잠시 뒤 다시 시도해 주세요',bad_api_key:'API 키가 맞지 않아요',
   too_long:'공고가 너무 길어요. 필요한 부분만 붙여넣어 주세요',parse_error:'정리 결과를 읽지 못했어요. 다시 시도해 주세요'}[c]||('문제가 생겼어요 ('+(c||'알 수 없음')+')')}
 
@@ -843,10 +845,11 @@ const app=$('#app'),main=$('#main'),layer=$('#layer');
 const nm=w=>(DB[w]&&DB[w].name)||NAMES[w]||'';
 const plOf=w=>META.planners.find(x=>x.id===w)||null;
 const roleOf=w=>(plOf(w)||{}).role||'';
-const canEdit=w=>(RANK[roleOf(w)]||0)>=RANK.edit;
+const canEdit=w=>roleOf(w)==='owner'; /* 공고 추가·수정은 자기 플래너에서만 */
 const canComment=w=>(RANK[roleOf(w)]||0)>=RANK.comment;
-const canShare=w=>(RANK[roleOf(w)]||0)>=RANK.full;
+const canShare=w=>roleOf(w)==='owner';
 const others=()=>META.planners.filter(x=>x.id!==S.me).map(x=>x.id);
+const ovl=()=>{const a=LS.get('ovl',[]);return others().filter(o=>Array.isArray(a)&&a.includes(o))}; /* 내 달력에 같이 보는 플래너 */
 const ro=()=>!canEdit(S.who);
 const vis=w=>(DB[w]||{posts:[]}).posts;
 const find=id=>{for(const w in DB){const p=DB[w].posts.find(x=>x.id===id);if(p)return p}return null};
@@ -900,13 +903,13 @@ function renderNav(){themeIcon();
   $('#tabbar').innerHTML=[VIEWS[1],VIEWS[0],VIEWS[2],VIEWS[3],VIEWS[4]].map(v=>`<button class="${S.view===v[0]?'on':''}" data-act="nav" data-v="${v[0]}">${ICON[v[2]]}${v[1]}</button>`).join('');
   const away=S.who!==S.me,os=others(),pk=$('#peekBtn');
   $('#profName').textContent=nm(S.me)||META.email;
-  pk.textContent=away?'내 플래너로':os.length===1?`👀 ${nm(os[0])} 보기`:'👀 공유받은 플래너';pk.hidden=!away&&!os.length;
+  pk.textContent='내 플래너로';pk.hidden=!away;
   $('#peekOn').textContent=away?`👀 ${nm(S.who)} · ${ROLE_NAME[roleOf(S.who)]||''}`:'';
   const sb=$('#shareBtn');if(sb)sb.hidden=!canShare(S.who);
   app.classList.toggle('ro',ro());app.classList.toggle('side-off',!!S.sideOff);showSync();
 }
 function roBanner(){if(S.who===S.me)return '';const r=roleOf(S.who);
-  const t={read:'읽기만 할 수 있어요',comment:'수정은 안 되고 <b>댓글</b>은 달 수 있어요',edit:'<b>편집 권한</b>이 있어요 · 고친 내용은 이 플래너에 저장돼요',full:'<b>전체 권한</b>(편집·공유)이 있어요 · 고친 내용은 이 플래너에 저장돼요'}[r]||'';
+  const t={read:'읽기만 할 수 있어요',comment:'수정은 안 되고 <b>댓글·답글</b>은 달 수 있어요'}[r]||'';
   return `<div class="ro-banner">👀 <span><b>${esc(nm(S.who))}</b> 님 플래너를 보는 중 · ${t}</span></div>`}
 const rowOpen=(id,cls,inner)=>`<div class="row click ${cls||''}" role="button" tabindex="0" data-act="open" data-id="${id}">${inner}</div>`;
 
@@ -959,7 +962,7 @@ function logout(expired){
 
 /* ================= S1 달력 ================= */
 function calEvents(){const m={};const add=(w,p)=>evsOf(p).forEach(e=>{(m[e.d]=m[e.d]||[]).push({w,p,e})});
-  vis(S.who).forEach(p=>add(S.who,p));if(S.who===S.me&&S.overlay)others().forEach(o=>vis(o).forEach(p=>add(o,p)));return m}
+  vis(S.who).forEach(p=>add(S.who,p));if(S.who===S.me)ovl().forEach(o=>vis(o).forEach(p=>add(o,p)));return m}
 function weekStart(s){const d=dt(s);d.setDate(d.getDate()-d.getDay());return iso(d)}
 function evRow(x){return rowOpen(x.p.id,x.w!==S.who?'partner':'',`<span class="kind k-${x.e.k}">${KIND[x.e.k]?KIND[x.e.k][0]:'•'}</span><span class="grow"><div class="t oneline" title="${esc(full(x.p))}">${x.w!==S.who?'('+esc(nm(x.w))+') ':''}${esc(label(x.p))}</div><div class="s">${x.day?md(x.day)+' · ':''}${esc(x.e.t)}</div></span><span class="chev">›</span>`)}
 const narrow=()=>app.clientWidth<760;
@@ -988,7 +991,7 @@ function calHTML(){
   const mode=S.calMode,evm=calEvents();
   const seg=`<div class="seg">${[['list','목록'],['month','월'],['week','주']].map(m=>`<button class="${mode===m[0]?'on':''}" data-act="cal-mode" data-v="${m[0]}">${m[1]}</button>`).join('')}</div>`;
   let title,body,side='';const nar=narrow();
-  const legend=`<div class="legend">${STLEG.map(([k,n])=>`<span class="lg st-${k}"><i></i>${n}</span>`).join('')}${S.who===S.me&&S.overlay&&others().length?`<span style="opacity:.55">흐린 표시 = ${esc(others().map(nm).join(', '))}</span>`:''}</div>`;
+  const legend=`<div class="legend">${STLEG.map(([k,n])=>`<span class="lg st-${k}"><i></i>${n}</span>`).join('')}${S.who===S.me&&ovl().length?`<span style="opacity:.55">흐린 표시 = ${esc(ovl().map(nm).join(', '))}</span>`:''}</div>`;
   if(mode==='list'){
     title='앞으로 30일';const groups=[];
     for(let i=0;i<=30;i++){const k=addDays(TODAY,i);if(evm[k])groups.push([k,evm[k]])}
@@ -1002,14 +1005,14 @@ function calHTML(){
       body=`<div class="weeklist">${cells.map(k=>{const ev=evm[k]||[];return `<div class="wrow ${k===TODAY?'today':''}"><div class="wday"><b>${WD[dt(k).getDay()]}</b><span class="num">${md(k).replace(/\(.\)/,'')}</span></div><div class="list">${ev.length?ev.map(evRow).join(''):'<span class="muted small">—</span>'}</div></div>`}).join('')}</div>${legend}`;
     }else{
       body=`<div class="grid7" style="grid-template-rows:auto repeat(${cells.length/7},minmax(0,1fr))">${WD.map((w,i)=>`<div class="wd ${i===0?'sun':i===6?'sat':''}">${w}</div>`).join('')}${cells.map(k=>{const ev=evm[k]||[];const oth=mode==='month'&&dt(k).getMonth()!==S.calM;
-        return `<button class="cell ${oth?'other':''} ${k===TODAY?'today':''} ${k===S.calSel?'sel':''} ${mode==='week'?'week':''}" data-act="cal-day" data-v="${k}"><span class="n">${dt(k).getDate()}</span>${ev.map(x=>`<span class="ev k-${x.e.k} st-${STK[x.p.stage]||'start'} ${x.w!==S.who?'p':''} ${nar&&mode==='month'?'':'go'}" ${nar&&mode==='month'?'':`data-act="open" data-id="${x.p.id}"`} title="${esc(COLNAME[x.p.stage]+' · '+(KIND[x.e.k]||KIND.etc)[1]+' · '+full(x.p))}">${nar&&mode==='month'?`<span class="tx">${esc(shortName(x.p))}</span>`:`<span class="tx">${x.p.type?`<span class="ty">[${esc(x.p.type)}]</span>`:''}<b>${esc(shortCo(x.p.co))}</b><span class="jb"> ${esc(x.p.job||shortRole(x.p.role))}</span></span>`}</span>`).join('')}</button>`}).join('')}</div>${legend}`;
+        return `<button class="cell ${oth?'other':''} ${k===TODAY?'today':''} ${k===S.calSel?'sel':''} ${mode==='week'?'week':''}" data-act="cal-day" data-v="${k}"><span class="n">${dt(k).getDate()}</span>${ev.map(x=>`<span class="ev k-${x.e.k} st-${STK[x.p.stage]||'start'} ${x.w!==S.who?'p':''} ${nar&&mode==='month'?'':'go'}" ${nar&&mode==='month'?'':`data-act="open" data-id="${x.p.id}"`} title="${esc((x.w!==S.who?nm(x.w)+' · ':'')+COLNAME[x.p.stage]+' · '+(KIND[x.e.k]||KIND.etc)[1]+' · '+full(x.p))}">${nar&&mode==='month'?`<span class="tx">${esc(shortName(x.p))}</span>`:`<span class="tx">${x.p.type?`<span class="ty">[${esc(x.p.type)}]</span>`:''}<b>${esc(shortCo(x.p.co))}</b><span class="jb"> ${esc(x.p.job||shortRole(x.p.role))}</span></span>`}</span>`).join('')}</button>`}).join('')}</div>${legend}`;
     }
   }
   side=calSide(evm,mode,nar);
   const arrows=mode==='list'?'':`<button class="icon-btn" data-act="cal-prev" aria-label="이전">‹</button>`;
   const arrowsR=mode==='list'?'':`<button class="icon-btn" data-act="cal-next" aria-label="다음">›</button>`;
   const empty=!vis(S.who).length&&!ro()?`<div class="note info" style="margin-bottom:12px">아직 공고가 없어요. <b>+ 공고 추가</b>로 첫 공고를 넣어 보세요.</div>`:'';
-  return `${roBanner()}${empty}<div class="view-head"><h2>${esc(nm(S.who))}의 달력</h2>${S.who!==S.me||!others().length?'':`<label class="toggle"><input type="checkbox" class="chk" data-ch="overlay" ${S.overlay?'checked':''}> 👀 ${others().length===1?esc(nm(others()[0])):'공유받은 플래너'} 일정 같이 보기</label>`}</div>
+  return `${roBanner()}${empty}<div class="view-head"><h2>${esc(nm(S.who))}의 달력</h2></div>
   <div class="cal-wrap"><div class="cal ${mode==='list'?'':'fill'}"><div class="cal-h">${seg}${arrows}<strong>${title}</strong>${arrowsR}<button class="btn sm" style="margin-left:auto" data-act="cal-today">오늘</button></div>${body}</div>${side}</div>`;
 }
 
@@ -1289,7 +1292,7 @@ function detailHTML(p){
   <div class="sheet-b">
    ${ed?`<div class="blk">${edInfo(ed)}</div>`:`<div class="blk sum"><div class="co">${esc(p.co)}</div><div class="muted">${[p.job,p.role,p.type,p.ind,p.loc].filter(Boolean).map(esc).join(' · ')}</div>
     <div class="meta"><span class="pill">${COLNAME[p.stage]}</span>${dueBit}</div>
-    <div class="links">${p.link?`<a class="link-btn" href="${esc(p.link)}" target="_blank" rel="noopener">공고 열기 ↗</a>`:''}${p.relLink?`<a class="link-btn" href="${esc(p.relLink)}" target="_blank" rel="noopener">관련 자료 ↗</a>`:''}</div>
+    <div class="links">${p.link?(okUrl(p.link)?`<a class="link-btn" href="${esc(p.link.trim())}" target="_blank" rel="noopener noreferrer">공고 열기 ↗</a>`:`<span class="muted small" title="http/https 주소만 열 수 있어요">공고 링크: ${esc(p.link)}</span>`):''}${p.relLink?(okUrl(p.relLink)?`<a class="link-btn" href="${esc(p.relLink.trim())}" target="_blank" rel="noopener noreferrer">관련 자료 ↗</a>`:`<span class="muted small" title="http/https 주소만 열 수 있어요">관련 자료: ${esc(p.relLink)}</span>`):''}</div>
     ${!r&&isOpen(p)?`<button class="btn primary block" data-act="submit-done">제출 완료</button>`:''}</div>`}
    <div class="blk"><div class="blk-h">전형 ${ed&&p.stage!=='종료'?'<button class="btn sm" data-act="step-menu">현재 전형 변경</button>':''}</div><div class="steps">${stepsH(p)}</div></div>
    <div class="blk"><div class="blk-h">일정 <span class="count">${evs.length}</span></div>
@@ -1399,9 +1402,8 @@ function setStage(p,st){
 }
 function settingsDlg(){const w=S.me;show(()=>dlgHead('설정 · '+esc(nm(w)))+`<div class="dlg-b" style="gap:0">
   <div class="set-row"><div><b>구글 계정</b><div class="muted small">${esc(META.email)}</div></div><button class="link-btn" data-act="logout">로그아웃</button></div>
-  ${META.admin?`<div class="set-row"><div><b>가입 승인</b><div class="muted small">${META.pending?`승인 기다리는 사람 ${META.pending}명`:'기다리는 사람이 없어요'}</div></div><button class="btn sm" data-act="members">회원 관리</button></div>`:''}
   <div class="set-row"><div><b>내 플래너 공유</b><div class="muted small">${shareSummary(w)}</div></div><button class="btn sm" data-act="share" data-v="${w}">공유 설정</button></div>
-  <div class="set-row"><div><b>공고 정리</b><div class="muted small">${usage.hasKey===false?'API 키가 아직 연결되지 않았어요':`오늘 ${usage.used} / ${usage.limit}회 사용`}</div></div>${sheets[w]?`<a class="link-btn" href="${esc(sheets[w])}" target="_blank" rel="noopener">${esc(nm(w))} 시트 열기 ↗</a>`:''}</div>
+  <div class="set-row"><div><b>공고 정리</b><div class="muted small">${usage.hasKey===false?'API 키가 아직 연결되지 않았어요':`오늘 ${usage.used} / ${usage.limit}회 사용 (한 사람당 하루 한도)`}</div></div>${sheets[w]?`<a class="link-btn" href="${esc(sheets[w])}" target="_blank" rel="noopener noreferrer">${esc(nm(w))} 시트 열기 ↗</a>`:''}</div>
   <div class="set-row" style="flex-direction:column;align-items:stretch;gap:8px"><b>내 직무 선택지</b><span class="muted small">공고 정리 때 이 목록으로 분류하고, 직무가 여러 개인 공고에선 여기 없는 직무를 빼고 보여 줘요</span><div class="jobs">${DB[w].jobs.map(j=>`<span>${esc(j)}${0?'':` <button class="x-btn" data-act="job-del" data-v="${esc(j)}" aria-label="${esc(j)} 빼기" title="목록에서 빼기">✕</button>`}</span>`).join('')}</div><div class="inline"><input type="text" id="jobNew" placeholder="직무 추가 (예: 손익관리)"><button class="btn sm" data-act="job-add">추가</button></div></div>
   <div class="set-row" style="flex-direction:column;align-items:stretch;gap:6px"><b>자동 할 일</b><span class="muted small">켜 둔 것만 ${esc(nm(w))} 님 할 일에 자동으로 생겨요</span>
    ${[['q','작성 중으로 옮기면 → 문항마다 "N번 문항 작성" (마감 3일 전)'],['pre','마감 확정 공고 → "제출 전 최종 점검" (마감 2일 전)'],['res','제출하면 → "결과 확인" (2주 뒤)'],['recheck','마감 미확인 → "마감 재확인" (재확인 날짜)']].map(([k,t])=>`<label class="toggle"><input type="checkbox" class="chk" data-auto="${k}" ${DB[w].auto[k]?'checked':''}> ${t}</label>`).join('')}</div>
@@ -1412,25 +1414,11 @@ function settingsDlg(){const w=S.me;show(()=>dlgHead('설정 · '+esc(nm(w)))+`<
 function resetFilters(){S.fInd='';S.fJob='';S.bQ='';S.fJobs=[];S.fInds=[];S.lf=LF0();S.lq=''}
 function shareSummary(w){const pl=plOf(w);const n=pl?pl.shares.length:0;return n?`${n}명에게 공유 중`:'아직 아무에게도 공유하지 않았어요'}
 function acctMenu(){show(()=>dlgHead('계정 · 플래너')+`<div class="dlg-b"><span class="muted small">${esc(META.email)} 로 로그인함</span>
-  <div class="menu-list">${[S.me,...others()].filter(Boolean).map(w=>`<button class="${S.who===w?'cur':''}" data-act="view" data-v="${w}"><b>${esc(nm(w))}</b>&nbsp;<span class="muted small">${w===S.me?'내 플래너':esc(ROLE_NAME[roleOf(w)]||'')}</span>${S.who===w?' (보는 중)':''}${newComments(w).length&&(w===S.me||canEdit(w))?` · 새 댓글 ${newComments(w).length}`:''}</button>`).join('')}</div>
-  ${others().length?'':'<span class="muted small">공유받은 플래너가 아직 없어요</span>'}
-  ${canShare(S.who)?`<button class="btn sm" data-act="share" data-v="${S.who}">${S.who===S.me?'내 플래너':esc(nm(S.who))+' 플래너'} 공유 설정</button>`:''}
-  ${META.admin?`<button class="btn sm" data-act="members">회원 관리${META.pending?` · 승인 대기 ${META.pending}명`:''}</button>`:''}
+  <div class="menu-list">${[S.me,...others()].filter(Boolean).map(w=>`<div class="acct-row"><button class="${S.who===w?'cur':''}" data-act="view" data-v="${w}"><b>${esc(nm(w))}</b>&nbsp;<span class="muted small">${w===S.me?'내 플래너':esc(ROLE_NAME[roleOf(w)]||'')}</span>${S.who===w?' (보는 중)':''}${newComments(w).length&&w===S.me?` · 새 댓글 ${newComments(w).length}`:''}</button>${w===S.me?'':`<label class="toggle small ovl-tg"><input type="checkbox" class="chk" data-ch="ovl" data-v="${w}" ${ovl().includes(w)?'checked':''}> 달력에 같이 보기</label>`}</div>`).join('')}</div>
+  ${others().length?'<span class="muted small">체크한 사람의 일정은 내 달력에 흐리게 같이 보여요</span>':'<span class="muted small">공유받은 플래너가 아직 없어요</span>'}
+  ${canShare(S.who)?`<button class="btn sm" data-act="share" data-v="${S.who}">내 플래너 공유 설정</button>`:''}
+  ${META.admin?`<a class="btn sm" href="admin.html">🛠 관리자 콘솔${META.pending?` · 승인 대기 ${META.pending}명`:''}</a>`:''}
   <button class="link-btn" data-act="logout" style="align-self:flex-start;color:var(--urgent)">로그아웃</button></div>`)}
-/* 회원 관리 (관리자만): 가입 신청 승인 · 거절 */
-const MST={'승인':'ok','대기':'wait','거절':'no'};
-async function membersDlg(){S.mem=null;
-  show(()=>{const L=S.mem;
-    const row=m=>`<div class="sh-row"><span class="av">${esc(String(m.name||m.email).slice(0,1).toUpperCase())}</span><span class="grow"><b>${esc(m.name||m.email.split('@')[0])}</b><span class="muted small">${esc(m.email)} · 가입 ${esc(m.joined||'-')}</span></span>
-      ${m.admin?'<span class="sh-role">관리자</span>':`<span class="mem-st ${MST[m.status]||''}">${esc(m.status)}</span>${m.status!=='승인'?`<button class="btn sm primary" data-act="mem-set" data-em="${esc(m.email)}" data-v="승인">승인</button>`:''}${m.status!=='거절'?`<button class="btn sm" data-act="mem-set" data-em="${esc(m.email)}" data-v="거절">${m.status==='승인'?'이용 중지':'거절'}</button>`:''}`}</div>`;
-    const ord={'대기':0,'승인':1,'거절':2};
-    return dlgHead('회원 관리')+`<div class="dlg-b">
-     <span class="muted small">처음 로그인한 사람은 '대기'로 들어와요. 승인하면 자기 플래너가 생기고 공고 자동 정리도 쓸 수 있어요. 공유받은 사람은 자동으로 승인돼요.</span>
-     <div class="sh-list">${L?L.slice().sort((a,b)=>(ord[a.status]-ord[b.status])||String(b.joined).localeCompare(String(a.joined))).map(row).join('')||'<span class="muted small">아직 아무도 없어요</span>':'<span class="muted small">불러오는 중…</span>'}</div></div>`});
-  try{const j=await api('members');S.mem=j.members;renderLayer()}catch(e){toast(errMsg(e))}}
-async function memSet(em,st){
-  try{const j=await api('approve',{email:em,status:st});S.mem=j.members;META.pending=j.members.filter(m=>m.status==='대기').length;renderLayer();toast(`${em} → ${st}`)}
-  catch(e){toast(errMsg(e))}}
 async function recheck(){S.busy=true;renderLayer();
   try{const j=await api('loadAll');applyLoad(j);S.busy=false;if(META.status&&META.status!=='승인'){render();toast('아직 승인 대기 중이에요');return}enterMine()}
   catch(e){S.busy=false;if(e.code!=='auth'){toast(errMsg(e));render()}}}
@@ -1445,7 +1433,7 @@ function shareDlg(pid){S.shMenu=null;S.shRole=S.shRole||'comment';
       return `<div class="sh-row">${av(x.name||x.email)}<span class="grow"><b>${esc(x.name||x.email.split('@')[0])}${me?' (나)':''}</b><span class="muted small">${esc(x.email)}</span></span>${can||me?`<button class="sh-role" data-act="sh-menu" data-em="${esc(x.email)}" aria-expanded="${open}">${ROLE_NAME[x.role]||x.role} ▾</button>${open?roleMenuH(pid,x.email,x.role,can):''}`:`<span class="sh-role">${ROLE_NAME[x.role]||x.role}</span>`}</div>`}).join('');
     return dlgHead(`공유 · ${esc(pl.name)} 플래너`)+`<div class="dlg-b">
      ${can?`<div class="sh-add"><input type="text" id="shEm" placeholder="쉼표로 구분한 이메일" autocomplete="off" aria-label="공유할 이메일"><select id="shRole" aria-label="권한">${ROLES.map(([k,n])=>`<option value="${k}" ${S.shRole===k?'selected':''}>${n}</option>`).join('')}</select><button class="btn primary sm" data-act="sh-add" data-pid="${pid}" ${S.shBusy?'disabled':''}>${S.shBusy?'공유 중…':'공유하기'}</button></div>`
-       :'<span class="muted small">공유 설정은 주인이나 전체 허용 권한이 있는 사람만 바꿀 수 있어요</span>'}
+       :'<span class="muted small">공유 설정은 플래너 주인만 바꿀 수 있어요</span>'}
      <div class="sh-list">${ownerRow}${rows}</div>
      <div class="sub-h">일반 사용 권한</div>
      <div class="sh-row"><span class="av">🔒</span><span class="grow"><b>초대받은 사용자만</b><span class="muted small">위에 있는 사람만 로그인해서 볼 수 있어요</span></span></div>
@@ -1498,7 +1486,7 @@ function formDlg(){
   const title=m==='review'?'정리 결과 확인':m==='manual'?'공고 직접 입력':'정보 수정';
   const a=S.add;const jobs=DB[S.who].jobs;
   const orig=rev&&a?`<details class="orig"><summary>원문 보기 (넣은 ${a.tab==='link'?'링크':a.tab==='cap'?'캡처':'본문'})</summary><div class="body">
-    ${a.link?`<div>링크: <a class="link-btn" href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.link)}</a></div>`:''}${a.text?`<pre>${esc(a.text.slice(0,3000))}</pre>`:''}${a.imgs.length||(a.imgUrls||[]).length?`<div class="thumbs">${a.imgs.map(s=>`<img src="${s}" alt="올린 캡처">`).join('')}${(a.imgUrls||[]).map(u=>`<img src="${esc(u)}" alt="이미지 주소" referrerpolicy="no-referrer">`).join('')}</div>`:''}</div></details>`:'';
+    ${a.link?`<div>링크: ${okUrl(a.link)?`<a class="link-btn" href="${esc(a.link.trim())}" target="_blank" rel="noopener noreferrer">${esc(a.link)}</a>`:esc(a.link)}</div>`:''}${a.text?`<pre>${esc(a.text.slice(0,3000))}</pre>`:''}${a.imgs.length||(a.imgUrls||[]).length?`<div class="thumbs">${a.imgs.map(s=>`<img src="${s}" alt="올린 캡처">`).join('')}${(a.imgUrls||[]).map(u=>`<img src="${esc(u)}" alt="이미지 주소" referrerpolicy="no-referrer">`).join('')}</div>`:''}</div></details>`:'';
   show(()=>dlgHead(title,m==='edit'?null:'form-back')+`<div class="dlg-b">
    ${a&&a.resumed&&m!=='edit'?'<div class="note info">작성하던 내용을 이어서 보여 드려요. <button class="link-btn" data-act="add-new">새로 시작 ›</button></div>':''}
    ${rev?'<div class="note">노란 칸은 공고에서 못 찾은 항목이에요. 채우거나 비워 두세요.</div>':''}
@@ -1656,16 +1644,14 @@ document.addEventListener('click',e=>{
     case 'side-tg':S.sideOff=!S.sideOff;LS.set('sideOff',S.sideOff);render();break;
     case 'retry':saveErr=false;flush();break;
     case 'prof-menu':acctMenu();break;
-    case 'view':S.who=v;S.open=null;S.dlg=null;S.overlay=false;resetFilters();render();if(v!==S.me)toast(`${nm(v)} 님 플래너 · ${ROLE_NAME[roleOf(v)]||''}`);break;
-    case 'peek':{const os=others();if(S.who!==S.me){S.who=S.me}else if(os.length===1){S.who=os[0]}else{acctMenu();break}S.open=null;S.dlg=null;resetFilters();render();break}
+    case 'view':S.who=v;S.open=null;S.dlg=null;resetFilters();render();if(v!==S.me)toast(`${nm(v)} 님 플래너 · ${ROLE_NAME[roleOf(v)]||''}`);break;
+    case 'peek':S.who=S.me;S.open=null;S.dlg=null;resetFilters();render();break;
     case 'share':shareDlg(v||S.who);break;
     case 'sh-add':shareAdd(t.dataset.pid);break;
     case 'sh-menu':S.shMenu=S.shMenu===t.dataset.em?null:t.dataset.em;renderLayer();break;
     case 'sh-set':setRole(t.dataset.pid,t.dataset.em,v);break;
     case 'logout':logout(false);break;
     case 'recheck':recheck();break;
-    case 'members':membersDlg();break;
-    case 'mem-set':memSet(t.dataset.em,v);break;
     case 'nav':S.view=v;S.open=null;S.dlg=null;render();break;
     case 'open':S.open=id;S.ed=null;S.delAsk=false;S.editQ=null;S.flash=null;S.replyTo=null;{const q=find(id);if(q)markRead(q)}render();break;
     case 'open-c':S.open=id;S.flash=t.dataset.c;S.editQ=null;{const q=find(id);if(q)markRead(q)}render();break;
@@ -1763,7 +1749,7 @@ document.addEventListener('change',e=>{
   if(c==='find'){S.fInd=el.value;$('#boardBody').innerHTML=boardBody()}
   if(c==='fjob'){S.fJob=el.value;$('#boardBody').innerHTML=boardBody()}
   if(c==='bsort'){S.bSort=el.value;$('#boardBody').innerHTML=boardBody()}
-  if(c==='overlay'){S.overlay=el.checked;render()}
+  if(c==='ovl'){const a=LS.get('ovl',[]).filter(x=>x!==el.dataset.v);if(el.checked)a.push(el.dataset.v);LS.set('ovl',a);render();toast(el.checked?`${nm(el.dataset.v)} 님 일정을 내 달력에 같이 보여 줘요`:`${nm(el.dataset.v)} 님 일정을 내 달력에서 뺐어요`)}
   if(c==='recFrom'||c==='recTo'){S[c]=el.value;S.recPreset='custom';render()}
   if(c==='lstage'){S.lf.stage=el.value;if(el.value==='제출전'){S.lSort='due';S.lDir=1}render()}
   if(c==='ltype'){S.lf.type=el.value;render()}
