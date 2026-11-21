@@ -383,7 +383,12 @@ mark.on{background:var(--hl-on)}
 .menu-list .ovl-tg{flex:none;white-space:nowrap;font-size:12px;font-weight:400;padding:8px 10px;color:var(--muted)}
 .dlg-b a.btn{align-self:flex-start;text-decoration:none}
 /* 달력 색 = 일정 종류 */
-.st-due{--col:var(--due);--soft:var(--due-soft)}
+/* 서류 마감(가장 많음) = 차분한 파랑, 제출 일정 = 자주색 (공고 단계의 '제출' 색과는 따로) */
+:root{--ev-sub:#A3307A;--ev-sub-soft:#F9E2F0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--ev-sub:#EE8FC6;--ev-sub-soft:#3A1E30}}
+:root[data-theme="dark"]{--ev-sub:#EE8FC6;--ev-sub-soft:#3A1E30}
+.st-due{--col:var(--st-sub);--soft:var(--st-sub-soft)}
+.st-evsub{--col:var(--ev-sub);--soft:var(--ev-sub-soft)}
 .st-ann{--col:var(--st-write);--soft:var(--st-write-soft)}
 .bad-url{font-size:12px;color:var(--urgent)}
 /* 달력 바: 자리가 모자라면 바는 그대로 두고 글씨 끝만 바 색으로 흐리게 */
@@ -648,6 +653,24 @@ mark[data-cs]{cursor:pointer}
   .cal-side{height:auto;min-height:0;overflow:visible}
   .cal-side .sec.nod{order:-1;position:static;margin-top:0;padding-top:0}
 }
+/* 1. 달력 칸: 일정 바가 납작하게 줄어들지 않게 → 넘치면 '+N'으로 */
+.cal .cell>*{flex-shrink:0}
+/* 2. 달력 머리: ‹ 2026년 11월 › 은 한 묶음. 휴대폰에선 둘째 줄 가운데 */
+.cal-nav{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+@container app (max-width:760px){.cal-nav{order:3;flex:1 1 100%;justify-content:center}}
+/* 3·4. 검색칸은 너무 좁아지지 않게(모자라면 줄바꿈), 휴대폰 필터는 두 칸씩 고르게 */
+.toolbar .search{flex:0 1 240px;min-width:180px}
+.ltools .search{max-width:none}
+@container app (max-width:760px){.toolbar .search{flex:1 1 100%}.toolbar select{flex:1 1 calc(50% - 4px);min-width:0}}
+/* 5. 보드가 옆으로 더 있으면 오른쪽 끝을 흐리게 */
+.board-wrap.more-r{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 48px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 48px),transparent)}
+/* 6. 계정 메뉴의 관리자 콘솔 버튼도 다른 버튼과 같은 글자색 */
+.dlg-b a.btn{color:var(--fg)}
+/* 마감 임박 D-day: 달력 바 색과 겹치지 않게 빨강 계열. D-1 이하는 꽉 찬 빨강, D-2~3은 연한 빨강 */
+.dd.urgent{background:var(--urgent);color:var(--surface)}
+.dd.warn{background:var(--urgent-soft);color:var(--urgent)}
+/* 일정 목록의 서류 마감 아이콘도 달력과 같은 파랑 */
+.kind.k-due{background:var(--st-sub-soft);color:var(--st-sub)}
 </style>
 </head>
 <body>
@@ -982,8 +1005,8 @@ function evRow(x){return rowOpen(x.p.id,x.w!==S.who?'partner':'',`<span class="k
 const narrow=()=>app.clientWidth<760;
 function shortName(p){if(p.short)return p.short;const s=shortCo(p.co).replace(/\s+/g,' ');return /^[A-Za-z0-9 &.\-]+$/.test(s)?s.slice(0,6):s.replace(/\s/g,'').slice(0,4)}
 const STK={'관심':'start','작성중':'write','제출':'sub','인적성':'test','면접1':'int','면접2':'int','면접3':'int','종료':'end'};
-const STLEG=[['due','서류 마감'],['test','인적성·필기'],['int','면접'],['ann','결과 발표'],['sub','제출'],['start','기타']];
-const EVC={due:'due',apt:'test',int:'int',ann:'ann',sub:'sub',etc:'start'}; /* 달력 색 = 일정 종류 (마감·면접 등). 끝난 공고 일정은 흐리게 */
+const STLEG=[['due','서류 마감'],['test','인적성·필기'],['int','면접'],['ann','결과 발표'],['evsub','제출'],['start','기타']];
+const EVC={due:'due',apt:'test',int:'int',ann:'ann',sub:'evsub',etc:'start'}; /* 달력 색 = 일정 종류 (마감·면접 등). 끝난 공고 일정은 흐리게 */
 function taskRowH(x){const n=diff(x.t.due);return `<div class="row ${x.t.done?'done':''}"><input type="checkbox" class="chk" data-ch="task" data-k="${x.key}" ${x.t.done?'checked':''} ${ro()?'disabled':''} aria-label="완료"><span class="grow"><div class="t">${esc(x.t.t)}${x.t.auto?' <span class="pill mute">자동</span>':''}</div><div class="s">${x.p?esc(shortCo(x.p.co))+' · ':''}${x.t.done?'오늘 완료':n<0?`<span class="late">${md(x.t.due)} 지남</span>`:n===0?'오늘':md(x.t.due)}</div></span>${x.p?`<button class="link-btn" data-act="open" data-id="${x.p.id}">공고 ›</button>`:''}</div>`}
 function calSide(evm,mode,nar){
   const today=tasksOf(S.who).filter(x=>x.t.due&&diff(x.t.due)<=0&&!x.t.done).sort((a,b)=>a.t.due.localeCompare(b.t.due));
@@ -1028,7 +1051,7 @@ function calHTML(){
   const arrowsR=mode==='list'?'':`<button class="icon-btn" data-act="cal-next" aria-label="다음">›</button>`;
   const empty=!vis(S.who).length&&!ro()?`<div class="note info" style="margin-bottom:12px">아직 공고가 없어요. <b>+ 공고 추가</b>로 첫 공고를 넣어 보세요.</div>`:'';
   return `${roBanner()}${empty}<div class="view-head"><h2>${esc(nm(S.who))}의 달력</h2></div>
-  <div class="cal-wrap"><div class="cal ${mode==='list'?'':'fill'}"><div class="cal-h">${seg}${arrows}<strong>${title}</strong>${arrowsR}<button class="btn sm" style="margin-left:auto" data-act="cal-today">오늘</button></div>${body}</div>${side}</div>`;
+  <div class="cal-wrap"><div class="cal ${mode==='list'?'':'fill'}"><div class="cal-h">${seg}<span class="cal-nav">${arrows}<strong>${title}</strong>${arrowsR}</span><button class="btn sm" style="margin-left:auto" data-act="cal-today">오늘</button></div>${body}</div>${side}</div>`;
 }
 
 /* ================= S2 홈 ================= */
@@ -1630,7 +1653,9 @@ function fitCells(){document.querySelectorAll('.cal.fill .cell').forEach(c=>{
 let fitT=null,wasNarrow=null;window.addEventListener('resize',()=>{clearTimeout(fitT);fitT=setTimeout(()=>{if(S.view!=='cal'||!S.me)return;const n=narrow();if(wasNarrow!==null&&n!==wasNarrow){wasNarrow=n;render()}else{wasNarrow=n;fitCells()}},120)});
 
 /* ================= 잘린 글자 흐리게 ================= */
-function markFades(){document.querySelectorAll('.oneline,.cal .ev,.card .t,.card .s').forEach(el=>{el.classList.toggle('fade',el.scrollWidth>el.clientWidth+1)})}
+function boardEdge(){const w=document.querySelector('.board-wrap');if(w)w.classList.toggle('more-r',w.scrollLeft+w.clientWidth<w.scrollWidth-4)}
+document.addEventListener('scroll',e=>{if(e.target&&e.target.classList&&e.target.classList.contains('board-wrap'))boardEdge()},true);
+function markFades(){boardEdge();document.querySelectorAll('.oneline,.cal .ev,.card .t,.card .s').forEach(el=>{el.classList.toggle('fade',el.scrollWidth>el.clientWidth+1)})}
 window.addEventListener('resize',()=>{clearTimeout(markFades.t);markFades.t=setTimeout(markFades,150)});
 
 /* ================= 렌더 ================= */

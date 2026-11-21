@@ -329,8 +329,8 @@ function evRow(x){return rowOpen(x.p.id,x.w!==S.who?'partner':'',`<span class="k
 const narrow=()=>app.clientWidth<760;
 function shortName(p){if(p.short)return p.short;const s=shortCo(p.co).replace(/\s+/g,' ');return /^[A-Za-z0-9 &.\-]+$/.test(s)?s.slice(0,6):s.replace(/\s/g,'').slice(0,4)}
 const STK={'관심':'start','작성중':'write','제출':'sub','인적성':'test','면접1':'int','면접2':'int','면접3':'int','종료':'end'};
-const STLEG=[['due','서류 마감'],['test','인적성·필기'],['int','면접'],['ann','결과 발표'],['sub','제출'],['start','기타']];
-const EVC={due:'due',apt:'test',int:'int',ann:'ann',sub:'sub',etc:'start'}; /* 달력 색 = 일정 종류 (마감·면접 등). 끝난 공고 일정은 흐리게 */
+const STLEG=[['due','서류 마감'],['test','인적성·필기'],['int','면접'],['ann','결과 발표'],['evsub','제출'],['start','기타']];
+const EVC={due:'due',apt:'test',int:'int',ann:'ann',sub:'evsub',etc:'start'}; /* 달력 색 = 일정 종류 (마감·면접 등). 끝난 공고 일정은 흐리게 */
 function taskRowH(x){const n=diff(x.t.due);return `<div class="row ${x.t.done?'done':''}"><input type="checkbox" class="chk" data-ch="task" data-k="${x.key}" ${x.t.done?'checked':''} ${ro()?'disabled':''} aria-label="완료"><span class="grow"><div class="t">${esc(x.t.t)}${x.t.auto?' <span class="pill mute">자동</span>':''}</div><div class="s">${x.p?esc(shortCo(x.p.co))+' · ':''}${x.t.done?'오늘 완료':n<0?`<span class="late">${md(x.t.due)} 지남</span>`:n===0?'오늘':md(x.t.due)}</div></span>${x.p?`<button class="link-btn" data-act="open" data-id="${x.p.id}">공고 ›</button>`:''}</div>`}
 function calSide(evm,mode,nar){
   const today=tasksOf(S.who).filter(x=>x.t.due&&diff(x.t.due)<=0&&!x.t.done).sort((a,b)=>a.t.due.localeCompare(b.t.due));
@@ -375,7 +375,7 @@ function calHTML(){
   const arrowsR=mode==='list'?'':`<button class="icon-btn" data-act="cal-next" aria-label="다음">›</button>`;
   const empty=!vis(S.who).length&&!ro()?`<div class="note info" style="margin-bottom:12px">아직 공고가 없어요. <b>+ 공고 추가</b>로 첫 공고를 넣어 보세요.</div>`:'';
   return `${roBanner()}${empty}<div class="view-head"><h2>${esc(nm(S.who))}의 달력</h2></div>
-  <div class="cal-wrap"><div class="cal ${mode==='list'?'':'fill'}"><div class="cal-h">${seg}${arrows}<strong>${title}</strong>${arrowsR}<button class="btn sm" style="margin-left:auto" data-act="cal-today">오늘</button></div>${body}</div>${side}</div>`;
+  <div class="cal-wrap"><div class="cal ${mode==='list'?'':'fill'}"><div class="cal-h">${seg}<span class="cal-nav">${arrows}<strong>${title}</strong>${arrowsR}</span><button class="btn sm" style="margin-left:auto" data-act="cal-today">오늘</button></div>${body}</div>${side}</div>`;
 }
 
 /* ================= S2 홈 ================= */
@@ -977,7 +977,9 @@ function fitCells(){document.querySelectorAll('.cal.fill .cell').forEach(c=>{
 let fitT=null,wasNarrow=null;window.addEventListener('resize',()=>{clearTimeout(fitT);fitT=setTimeout(()=>{if(S.view!=='cal'||!S.me)return;const n=narrow();if(wasNarrow!==null&&n!==wasNarrow){wasNarrow=n;render()}else{wasNarrow=n;fitCells()}},120)});
 
 /* ================= 잘린 글자 흐리게 ================= */
-function markFades(){document.querySelectorAll('.oneline,.cal .ev,.card .t,.card .s').forEach(el=>{el.classList.toggle('fade',el.scrollWidth>el.clientWidth+1)})}
+function boardEdge(){const w=document.querySelector('.board-wrap');if(w)w.classList.toggle('more-r',w.scrollLeft+w.clientWidth<w.scrollWidth-4)}
+document.addEventListener('scroll',e=>{if(e.target&&e.target.classList&&e.target.classList.contains('board-wrap'))boardEdge()},true);
+function markFades(){boardEdge();document.querySelectorAll('.oneline,.cal .ev,.card .t,.card .s').forEach(el=>{el.classList.toggle('fade',el.scrollWidth>el.clientWidth+1)})}
 window.addEventListener('resize',()=>{clearTimeout(markFades.t);markFades.t=setTimeout(markFades,150)});
 
 /* ================= 렌더 ================= */

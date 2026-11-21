@@ -257,3 +257,21 @@ mark[data-cs]{cursor:pointer}
   .cal-side{height:auto;min-height:0;overflow:visible}
   .cal-side .sec.nod{order:-1;position:static;margin-top:0;padding-top:0}
 }
+/* 1. 달력 칸: 일정 바가 납작하게 줄어들지 않게 → 넘치면 '+N'으로 */
+.cal .cell>*{flex-shrink:0}
+/* 2. 달력 머리: ‹ 2026년 11월 › 은 한 묶음. 휴대폰에선 둘째 줄 가운데 */
+.cal-nav{display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+@container app (max-width:760px){.cal-nav{order:3;flex:1 1 100%;justify-content:center}}
+/* 3·4. 검색칸은 너무 좁아지지 않게(모자라면 줄바꿈), 휴대폰 필터는 두 칸씩 고르게 */
+.toolbar .search{flex:0 1 240px;min-width:180px}
+.ltools .search{max-width:none}
+@container app (max-width:760px){.toolbar .search{flex:1 1 100%}.toolbar select{flex:1 1 calc(50% - 4px);min-width:0}}
+/* 5. 보드가 옆으로 더 있으면 오른쪽 끝을 흐리게 */
+.board-wrap.more-r{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 48px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 48px),transparent)}
+/* 6. 계정 메뉴의 관리자 콘솔 버튼도 다른 버튼과 같은 글자색 */
+.dlg-b a.btn{color:var(--fg)}
+/* 마감 임박 D-day: 달력 바 색과 겹치지 않게 빨강 계열. D-1 이하는 꽉 찬 빨강, D-2~3은 연한 빨강 */
+.dd.urgent{background:var(--urgent);color:var(--surface)}
+.dd.warn{background:var(--urgent-soft);color:var(--urgent)}
+/* 일정 목록의 서류 마감 아이콘도 달력과 같은 파랑 */
+.kind.k-due{background:var(--st-sub-soft);color:var(--st-sub)}
