@@ -4,7 +4,7 @@
   "description": "구직 플래너 로그인 시험판 — 시험 도구용 (앱 자체는 index.html 한 파일)",
   "scripts": {
     "build": "bash build.sh",
-    "test": "node test/mock_server_test.js index.html && node test/server_test.js && node test/security_test.js index.html",
+    "test": "node test/mock_server_test.js index.html && node test/server_test.js && node test/security_test.js index.html && node test/questions_test.js index.html",
     "preview": "python test/preview.py"
   },
   "devDependencies": {

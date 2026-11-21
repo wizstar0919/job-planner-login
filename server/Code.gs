@@ -25,7 +25,7 @@ const SCHEMA = {
     ['link','공고 링크'],['relLink','관련 자료'],['applyStart','접수 시작'],['dueKind','마감 종류'],['due','마감'],['recheck','재확인일'],
     ['stage','단계'],['result','결과'],['failAt','탈락 단계'],['submitted','제출일'],['steps','전형 절차'],['cur','현재 전형'],
     ['memo','비고'],['src','등록 경로'],['created','생성일'],['updated','수정일'],['short','달력 표시 이름'],['rev','수정번호']] },
-  qs: { tab: '문항', cols: [['id','id'],['pid','공고 id'],['i','순번'],['t','문항'],['n','글자 수'],['a','답변'],['st','상태'],['lock','잠금'],['ver','버전']] },
+  qs: { tab: '문항', cols: [['id','id'],['pid','공고 id'],['i','순번'],['t','문항'],['n','글자 수'],['a','답변'],['st','상태'],['lock','잠금'],['ver','버전'],['u','단위']] }, // 단위: '' = 글자(자), 'byte' = 바이트
   events: { tab: '일정', cols: [['id','id'],['pid','공고 id'],['d','날짜'],['k','종류'],['t','내용']] },
   tasks: { tab: '할 일', cols: [['id','id'],['pid','공고 id'],['t','내용'],['due','기한'],['done','완료'],['doneAt','완료일'],['auto','자동']] },
   comments: { tab: '댓글', cols: [['id','id'],['pid','공고 id'],['qi','문항 번호'],['quote','고른 문장'],['text','내용'],['by','작성자'],['at','작성일'],
@@ -480,6 +480,8 @@ function commentUpsert_(rows, n, ctx, postIds) {
   if (add.length) { next.replies = JSON.stringify(old.concat(add)); if (!ctx.owner) next.read = ''; }
   if (n.resolved != null) next.resolved = n.resolved === 'Y' ? 'Y' : '';
   if (ctx.owner && n.read != null) next.read = n.read === 'Y' ? 'Y' : '';
+  // 주인이 문항을 빼거나 고치면 댓글이 가리키는 문항 번호를 맞춤 (주인만)
+  if (ctx.owner && n.qi != null && (String(n.qi) === '' || /^\d{1,3}$/.test(String(n.qi)))) next.qi = String(n.qi);
   rows[i] = next;
 }
 
@@ -724,7 +726,7 @@ function extractRun_(input, email, key, st) {
     '- applyStart: 접수 시작일 "YYYY-MM-DD" (없으면 "")\n' +
     '- steps: 전형 순서 (예: ["서류","인적성","1차 면접","최종 면접"])\n' +
     '- events: 공고에 날짜가 나온 전형 일정만 (k: apt=인적성·AI역량, int=면접, ann=결과 발표, etc=기타). 서류 마감은 넣지 않음\n' +
-    '- qs: 자기소개서 문항을 **원문 그대로** (요약·수정 금지), n은 글자 수 제한 (없으면 0)\n' +
+    '- qs: 자기소개서 문항을 **원문 그대로** (요약·수정 금지). 단 맨 앞 번호("1.", "문항 1", "Q1" 등)와 글자 수 표시("(500자 이상, 1000자 이하)", "(1,000자)" 등)는 t에서 빼고, n에 최대 글자 수만 (최소는 버림, 없으면 0). u는 글자 수가 바이트(byte) 기준이면 "byte", 글자 기준이면 ""\n' +
     '- memo: "고용형태 · 근무지 · 주요 업무 · 전형 · 우대 · 마감 시각" 순서로 한 줄 요약 (가운뎃점으로 구분, 공고에 있는 것만)\n' +
     '- short: 휴대폰 달력의 좁은 칸에 쓸 회사 줄임말. 한글 2~4자 또는 영문 약자 2~5자로 널리 쓰는 이름 (예: SK네트웍스서비스→SKNS, 고영테크놀러지→고영, 한국투자증권→한투)\n' +
     (input.text ? '\n[붙여넣은 공고 본문]\n' + String(input.text).slice(0, 60000) + '\n' : '') +
@@ -744,7 +746,7 @@ function extractRun_(input, email, key, st) {
       steps: { type: 'array', items: { type: 'string' } },
       events: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['d','k','t'],
         properties: { d: { type: 'string' }, k: { type: 'string', enum: ['apt','int','ann','etc'] }, t: { type: 'string' } } } },
-      qs: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['t','n'], properties: { t: { type: 'string' }, n: { type: 'integer' } } } },
+      qs: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['t','n','u'], properties: { t: { type: 'string' }, n: { type: 'integer' }, u: { type: 'string', enum: ['', 'byte'] } } } },
       memo: { type: 'string' },
       positions: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['role','job','loc','career','note'],
         properties: { role: { type: 'string' }, job: { type: 'string' }, loc: { type: 'string' }, career: { type: 'string' }, note: { type: 'string' } } } }

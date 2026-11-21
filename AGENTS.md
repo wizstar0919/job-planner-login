@@ -23,6 +23,7 @@
 | `server/appsscript.json` | Apps Script 설정 (실행 계정·권한 범위) |
 | `test/mock_server_test.js` | 가짜 서버로 앱을 돌려 보는 자동 시험 (jsdom) |
 | `test/server_test.js` | `server/Code.gs` 를 가짜 구글 환경(메모리 시트·속성·잠금·네트워크)에서 돌려 보는 시험 |
+| `test/questions_test.js` | 자소서 문항 기능 시험 (글자 수 세기, 문항 정리, 추가·수정·빼기) (jsdom) · 공용 준비 코드 `test/harness.js` |
 | `test/security_test.js` | 화면의 보안·데이터 상황(이상한 시트 값, 편집 충돌, 저장 실패 등)을 흉내 내는 시험 (jsdom) |
 | `test/preview.py` `test/shot.py` | 가짜 데이터로 화면을 띄워 사진 찍는 도구 |
 | `manifest.webmanifest`, `icon*` | 휴대폰 홈 화면 추가용 |
@@ -37,6 +38,7 @@
 - **관리자 콘솔**: 관리자만 쓸 수 있음. 다른 사람 플래너의 내용은 보여 주지 않는 것이 의도.
 - **공고 자동 정리**: 공고 링크·캡처·본문을 서버가 Claude API 로 보내 항목을 뽑아 옴. 한 사람당 하루 20번, 서버 전체 하루 100번 한도. 이미지 주소 가져오기는 한 사람당 하루 100번. API 키는 서버 스크립트 속성에만.
 - **댓글**: 작성자·작성일은 서버가 정함. 공유받은 사람은 새 댓글·답글 추가와 해결 표시만. 답글은 기존 목록에 더하는 방식.
+- **자소서 문항**: 글자 수는 공백·줄바꿈 포함으로 셈. 단위는 글자(줄바꿈 1자) 또는 바이트(한글 2, 영문·숫자·공백 1, 줄바꿈 2). 새로 넣거나 고친 문항은 맨 앞 번호와 글자 수 표시를 떼고 최대 글자 수만 남김(이미 저장된 문항은 그대로).
 - **저장**: 바뀐 줄만 저장하고, 공고마다 수정번호로 다른 기기 변경을 감지. 편집 중 같은 칸이 겹치면 알림. 저장 실패분은 기기에 남겨 다음에 보냄.
 - **링크**: 공고 링크·관련 자료 칸은 http/https 주소만 링크로 연다.
 - **화면**: 휴대폰(약 360px)부터 넓은 PC까지 한 파일로 대응. PC 창을 줄여 쓰는 경우도 있음. 밝은·어두운 화면 둘 다.
@@ -45,7 +47,7 @@
 ## 돌려 보는 법
 ```bash
 bash build.sh                              # src/ → index.html (src 를 고쳤을 때만 필요)
-npm test                                   # 자동 시험 3종 (mock_server / server / security). 결과 줄마다 OK/FAIL, 맨 끝에 ERRORS
+npm test                                   # 자동 시험 4종 (mock_server / server / security / questions). 결과 줄마다 OK/FAIL, 맨 끝에 ERRORS
 python test/preview.py                     # 가짜 데이터 화면 preview.html 생성
 python test/shot.py cal_375 375 900 "v=cal"   # 폭 375px 달력 화면 사진 → .codex-tmp/cal_375.png
 ```

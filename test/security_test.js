@@ -1,12 +1,10 @@
 // 화면(index.html) 보안·데이터 시험: 가짜 서버로 앱을 띄워 공격·충돌 상황을 흉내 냄 (jsdom)
 //   node test/security_test.js [index.html]   → 줄마다 OK/FAIL, 맨 끝에 ERRORS
-const { JSDOM } = require('jsdom'), fs = require('fs'), path = require('path');
+const fs = require('fs'), path = require('path'), H = require('./harness');
 const html = fs.readFileSync(process.argv[2] || path.join(__dirname, '..', 'index.html'), 'utf8');
 const DEFAULT = (html.match(/const DEFAULT_SERVER='([^']+)'/) || [])[1];
-const copy = x => JSON.parse(JSON.stringify(x));
 const log = [], ck = (n, c) => log.push((c ? 'OK ' : 'FAIL ') + n);
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-const T = () => ({ posts: [], qs: [], events: [], tasks: [], comments: [], hist: [], settings: [] });
+const { sleep, T } = H;
 const EVIL = '<img src=x onerror=bad>';
 
 function mkStore(evil) {
@@ -18,47 +16,7 @@ function mkStore(evil) {
   t.comments.push({ id: evil ? 'x" onmouseover="bad' : 'c1', pid: 'p1', qi: '', quote: '', text: '첫 댓글', by: 'gh', at: evil ? EVIL : '2026-11-20', replies: '[]', resolved: '', read: '', ver: '' });
   return { me: t };
 }
-function app(opt) {
-  opt = opt || {};
-  const store = opt.store || mkStore(opt.evil), calls = [];
-  let down = false;
-  const meta = { email: 'me@example.com', me: 'me', status: '승인', names: { me: '민석', gh: '건희' },
-    planners: [{ id: 'me', name: '민석', owner: 'me@example.com', role: 'owner', shares: [] }] };
-  const server = (url, b) => {
-    calls.push({ url, action: b.action, body: b });
-    if (down && b.action === 'batch') throw new Error('offline');
-    if (b.action === 'loadAll') return { ok: true, meta: copy(meta), data: copy(store), usage: { used: 0, limit: 20, hasKey: true }, sheets: {} };
-    if (b.action === 'logoutAll') return { ok: true };
-    if (b.action === 'batch') {
-      const S = store[b.pid], conflicts = [], revs = {};
-      b.ops.forEach(o => { if (o.op === 'check') { const c = S.posts.find(r => r.id === o.id); if ((c ? c.rev : '') !== o.rev) conflicts.push(o.unit); } });
-      b.ops.forEach(o => {
-        if (o.op === 'check' || conflicts.includes(o.unit)) return;
-        if (o.op === 'upsert') o.rows.forEach(n => { n = Object.fromEntries(Object.entries(n).map(([k, v]) => [k, String(v)]));
-          if (o.table === 'posts') { n.rev = 'r' + Math.random().toString(36).slice(2, 6); revs[n.id] = n.rev; }
-          const rows = S[o.table], k = o.table === 'settings' ? 'k' : 'id', i = rows.findIndex(r => r[k] === n[k]); if (i >= 0) rows[i] = Object.assign({}, rows[i], n); else rows.push(n); });
-        if (o.op === 'remove') S[o.table] = S[o.table].filter(r => r[o.key] !== o.value);
-      });
-      return { ok: true, conflicts, revs };
-    }
-    return { ok: false, error: 'unknown' };
-  };
-  const dom = new JSDOM(html, { runScripts: 'outside-only', pretendToBeVisual: true, url: 'https://wizstar0919.github.io/job-planner-login/' + (opt.hash || '') });
-  const w = dom.window, d = w.document;
-  w.fetch = async (url, o) => { const r = server(url, JSON.parse(o.body)); return { json: async () => copy(r) }; };
-  w.google = { accounts: { id: { initialize() {}, renderButton() {}, disableAutoSelect() {} } } };
-  const ls = opt.ls || { jpl_cfg: JSON.stringify({ server: opt.server || DEFAULT, sess: 'S1', email: 'me@example.com' }) };
-  Object.keys(ls).forEach(k => w.localStorage.setItem(k, ls[k]));
-  const errs = [];
-  w.addEventListener('error', e => errs.push(e.message));
-  w.eval([...d.querySelectorAll('script')].map(x => x.textContent).join('\n'));
-  const click = s => { const el = typeof s === 'string' ? d.querySelector(s) : s; if (!el) throw new Error('missing ' + s); el.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); };
-  const lsDump = () => { const o = {}; for (let i = 0; i < w.localStorage.length; i++) { const k = w.localStorage.key(i); o[k] = w.localStorage.getItem(k); } return o; };
-  const refresh = async () => { d.dispatchEvent(new w.Event('visibilitychange')); await sleep(60); };
-  const openP1 = () => { click('.nav-btn[data-v="board"]'); const c = [...d.querySelectorAll('.card')].find(x => x.textContent.includes('보안회사')); click(c); };
-  const setF = (sel, v) => { const el = d.querySelector(sel); el.value = v; el.dispatchEvent(new w.Event('input', { bubbles: true })); };
-  return { w, d, store, calls, errs, click, lsDump, refresh, openP1, setF, setDown: v => { down = v; } };
-}
+const app = opt => H.app(html, Object.assign({}, opt, { store: (opt && opt.store) || mkStore(opt && opt.evil) }));
 const injected = d => [...d.querySelectorAll('*')].filter(el => [...el.attributes].some(a => /^on/i.test(a.name)) || (el.tagName === 'IMG' && el.getAttribute('src') === 'x') || (el.tagName === 'B' && el.textContent === 'x'));
 
 (async () => { try {

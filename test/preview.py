@@ -4,6 +4,7 @@
 #     v=home|cal|board|list|rec   화면      m=list|month|week  달력 보기 방식
 #     open=1 첫 공고 상세 열기 (open=p1 처럼 공고 id 도 됨)    add=1 공고 추가 창    menu=1 계정 메뉴    set=1 설정 창    light=1 / dark=1 밝은·어두운 화면
 #     who=gh  공유받은 플래너(댓글 허용) 보기
+#     do=선택자~선택자::값  차례로 누르기·값 넣기 (값 안의 ¶ 는 줄바꿈)   예) do=.q-add-btn~.qnew textarea::1. 지원 동기 (700자)~[data-act="qn-ok"]
 import sys
 import json, datetime, random, os
 try: sys.stdout.reconfigure(encoding='utf-8')
@@ -62,6 +63,8 @@ addEventListener('load',function(){setTimeout(function(){
   if(q.get('add'))c('[data-act="add"]');
   if(q.get('menu'))c('#profBtn');
   if(q.get('set'))c('[data-act="settings"]');
+  /* do=선택자1~선택자2::값~... : 차례로 누르거나(:: 없으면) 값 넣기(:: 있으면). 값 안의 ¶ 는 줄바꿈 */
+  (q.get('do')||'').split('~').filter(Boolean).forEach(function(x){var i=x.indexOf('::');if(i<0){c(x);return}var el=document.querySelector(x.slice(0,i));if(el){el.value=x.slice(i+2).split('¶').join(String.fromCharCode(10));el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}))}});
 },400)});
 })();
 </script>""" % json.dumps(load, ensure_ascii=False)
