@@ -66,7 +66,14 @@ const openCard=co=>{click('.nav-btn[data-v="board"]');const c=[...d.querySelecto
  ck('share button visible on mine',!d.querySelector('#shareBtn').hidden);
  ck('no 👀 peek button on my planner',d.querySelector('#peekBtn').hidden);
  // 내 플래너에 공고 추가
- click('.side [data-act="add"]');d.querySelector('#aLink').value='https://example.com/job';click('[data-act="extract"]');await sleep(50);
+ click('.side [data-act="add"]');
+ {const el=d.querySelector('#aLink');el.value='javascript:alert(1)';el.dispatchEvent(new w.Event('input',{bubbles:true}));
+  ck('bad url → small red warning',!d.querySelector('.bad-url[data-bad="aLink"]').hidden);
+  const n=calls.length;click('[data-act="extract"]');await sleep(30);
+  ck('bad url → extract not sent',calls.length===n&&d.querySelector('.dlg').textContent.includes('잘못된 주소'));}
+ d.querySelector('#aLink').value='https://example.com/job';d.querySelector('#aLink').dispatchEvent(new w.Event('input',{bubbles:true}));
+ ck('good url → warning hidden',d.querySelector('.bad-url[data-bad="aLink"]').hidden);
+ click('[data-act="extract"]');await sleep(50);
  click('[data-act="form-save"]');await sleep(800);
  ck('saved to my planner (me)',store.me.posts.length===1&&store.me.posts[0].co==='테스트전자');
  // 달력 같이 보기: 계정 메뉴에서 건희 체크 → 내 달력에 건희 일정이 흐리게
@@ -75,6 +82,7 @@ const openCard=co=>{click('.nav-btn[data-v="board"]');const c=[...d.querySelecto
  ck('no calendar overlay before checking',!d.querySelector('#main .ev.p'));
  {const cb=d.querySelector('[data-ch="ovl"][data-v="gh"]');cb.checked=true;cb.dispatchEvent(new w.Event('change',{bubbles:true}))}
  click('[data-act="dlg-close"]');click('.nav-btn[data-v="cal"]');
+ ck('calendar color by event kind (due)',[...d.querySelectorAll('#main .ev.p')].some(x=>x.classList.contains('st-due'))&&d.querySelector('#main .legend').textContent.includes('서류 마감'));
  ck('gh events overlaid on my calendar',[...d.querySelectorAll('#main .ev.p')].some(x=>(x.title||'').includes('건희'))&&!d.querySelector('#main [data-ch="overlay"]'));
  // 건희 플래너 (댓글 허용) → 공고 추가·수정 불가
  click('#profBtn');click('[data-act="view"][data-v="gh"]');await sleep(10);

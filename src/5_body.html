@@ -329,7 +329,8 @@ function evRow(x){return rowOpen(x.p.id,x.w!==S.who?'partner':'',`<span class="k
 const narrow=()=>app.clientWidth<760;
 function shortName(p){if(p.short)return p.short;const s=shortCo(p.co).replace(/\s+/g,' ');return /^[A-Za-z0-9 &.\-]+$/.test(s)?s.slice(0,6):s.replace(/\s/g,'').slice(0,4)}
 const STK={'관심':'start','작성중':'write','제출':'sub','인적성':'test','면접1':'int','면접2':'int','면접3':'int','종료':'end'};
-const STLEG=[['start','시작 전'],['write','작성 중'],['sub','제출'],['test','인적성·필기'],['int','면접'],['end','종료']];
+const STLEG=[['due','서류 마감'],['test','인적성·필기'],['int','면접'],['ann','결과 발표'],['sub','제출'],['start','기타']];
+const EVC={due:'due',apt:'test',int:'int',ann:'ann',sub:'sub',etc:'start'}; /* 달력 색 = 일정 종류 (마감·면접 등). 끝난 공고 일정은 흐리게 */
 function taskRowH(x){const n=diff(x.t.due);return `<div class="row ${x.t.done?'done':''}"><input type="checkbox" class="chk" data-ch="task" data-k="${x.key}" ${x.t.done?'checked':''} ${ro()?'disabled':''} aria-label="완료"><span class="grow"><div class="t">${esc(x.t.t)}${x.t.auto?' <span class="pill mute">자동</span>':''}</div><div class="s">${x.p?esc(shortCo(x.p.co))+' · ':''}${x.t.done?'오늘 완료':n<0?`<span class="late">${md(x.t.due)} 지남</span>`:n===0?'오늘':md(x.t.due)}</div></span>${x.p?`<button class="link-btn" data-act="open" data-id="${x.p.id}">공고 ›</button>`:''}</div>`}
 function calSide(evm,mode,nar){
   const today=tasksOf(S.who).filter(x=>x.t.due&&diff(x.t.due)<=0&&!x.t.done).sort((a,b)=>a.t.due.localeCompare(b.t.due));
@@ -366,7 +367,7 @@ function calHTML(){
       body=`<div class="weeklist">${cells.map(k=>{const ev=evm[k]||[];return `<div class="wrow ${k===TODAY?'today':''}"><div class="wday"><b>${WD[dt(k).getDay()]}</b><span class="num">${md(k).replace(/\(.\)/,'')}</span></div><div class="list">${ev.length?ev.map(evRow).join(''):'<span class="muted small">—</span>'}</div></div>`}).join('')}</div>${legend}`;
     }else{
       body=`<div class="grid7" style="grid-template-rows:auto repeat(${cells.length/7},minmax(0,1fr))">${WD.map((w,i)=>`<div class="wd ${i===0?'sun':i===6?'sat':''}">${w}</div>`).join('')}${cells.map(k=>{const ev=evm[k]||[];const oth=mode==='month'&&dt(k).getMonth()!==S.calM;
-        return `<button class="cell ${oth?'other':''} ${k===TODAY?'today':''} ${k===S.calSel?'sel':''} ${mode==='week'?'week':''}" data-act="cal-day" data-v="${k}"><span class="n">${dt(k).getDate()}</span>${ev.map(x=>`<span class="ev k-${x.e.k} st-${STK[x.p.stage]||'start'} ${x.w!==S.who?'p':''} ${nar&&mode==='month'?'':'go'}" ${nar&&mode==='month'?'':`data-act="open" data-id="${x.p.id}"`} title="${esc((x.w!==S.who?nm(x.w)+' · ':'')+COLNAME[x.p.stage]+' · '+(KIND[x.e.k]||KIND.etc)[1]+' · '+full(x.p))}">${nar&&mode==='month'?`<span class="tx">${esc(shortName(x.p))}</span>`:`<span class="tx">${x.p.type?`<span class="ty">[${esc(x.p.type)}]</span>`:''}<b>${esc(shortCo(x.p.co))}</b><span class="jb"> ${esc(x.p.job||shortRole(x.p.role))}</span></span>`}</span>`).join('')}</button>`}).join('')}</div>${legend}`;
+        return `<button class="cell ${oth?'other':''} ${k===TODAY?'today':''} ${k===S.calSel?'sel':''} ${mode==='week'?'week':''}" data-act="cal-day" data-v="${k}"><span class="n">${dt(k).getDate()}</span>${ev.map(x=>`<span class="ev k-${x.e.k} st-${EVC[x.e.k]||'start'} ${x.p.stage==='종료'?'st-end':''} ${x.w!==S.who?'p':''} ${nar&&mode==='month'?'':'go'}" ${nar&&mode==='month'?'':`data-act="open" data-id="${x.p.id}"`} title="${esc((x.w!==S.who?nm(x.w)+' · ':'')+COLNAME[x.p.stage]+' · '+(KIND[x.e.k]||KIND.etc)[1]+' · '+full(x.p))}">${nar&&mode==='month'?`<span class="tx">${esc(shortName(x.p))}</span>`:`<span class="tx">${x.p.type?`<span class="ty">[${esc(x.p.type)}]</span>`:''}<b>${esc(shortCo(x.p.co))}</b><span class="jb"> ${esc(x.p.job||shortRole(x.p.role))}</span></span>`}</span>`).join('')}</button>`}).join('')}</div>${legend}`;
     }
   }
   side=calSide(evm,mode,nar);
@@ -638,7 +639,7 @@ function edInfo(v){
     ${v.dueKind==='확정'?`<div class="field ${S.ed.focus?'focus':''}"><label for="fDue">마감 일시</label><input id="fDue" type="datetime-local" data-f="due" value="${esc(v.due)}"></div>`:v.dueKind==='미확인'?`<div class="field ${S.ed.focus?'focus':''}"><label for="fRecheck">재확인 날짜</label><input id="fRecheck" type="date" data-f="recheck" value="${esc(v.recheck)}"></div>`:'<div></div>'}</div>
    <div class="f2"><div class="field"><label for="fStage">단계</label><select id="fStage" data-f="stage">${COLS.map(c=>`<option value="${c[0]}" ${v.stage===c[0]?'selected':''}>${c[1]}</option>`).join('')}</select></div>
     <div class="field"><label for="fSteps">전형 절차 ( > 로 구분)</label><input id="fSteps" data-f="steps" value="${esc(v.steps)}"></div></div>
-   <div class="f2"><div class="field"><label for="fLink">공고 주소</label><input id="fLink" data-f="link" value="${esc(v.link)}" placeholder="https://"></div><div class="field"><label for="fRel">관련 자료 링크 (선택)</label><input id="fRel" data-f="relLink" value="${esc(v.relLink)}"></div></div>
+   <div class="f2"><div class="field"><label for="fLink">공고 주소</label><input id="fLink" data-f="link" value="${esc(v.link)}" placeholder="https://"><span class="bad-url" data-bad="fLink" ${!v.link||okUrl(v.link)?'hidden':''}>잘못된 주소예요 · http:// 또는 https:// 로 시작하는 주소를 넣어 주세요</span></div><div class="field"><label for="fRel">관련 자료 링크 (선택)</label><input id="fRel" data-f="relLink" value="${esc(v.relLink)}"><span class="bad-url" data-bad="fRel" ${!v.relLink||okUrl(v.relLink)?'hidden':''}>잘못된 주소예요 · http:// 또는 https:// 로 시작하는 주소를 넣어 주세요</span></div></div>
    <div class="field"><label for="fMemo">비고</label><textarea id="fMemo" data-f="memo" style="min-height:70px">${esc(v.memo)}</textarea></div>
   </div>`;
 }
@@ -682,6 +683,7 @@ function syncEd(){if(!S.ed)return;const v=S.ed.v;
 function edSave(){
   syncEd();const p=find(S.ed.pid),v=S.ed.v;if(!p){S.ed=null;return}
   if(!v.co.trim()){toast('회사 이름은 꼭 넣어 주세요');return}
+  const badUrl=[[v.link,'공고 주소'],[v.relLink,'관련 자료 링크']].find(([u])=>String(u||'').trim()&&!okUrl(u));if(badUrl){toast(badUrl[1]+'가 잘못된 주소예요');return}
   if(v.dueKind==='확정'&&!v.due){toast('마감 일시를 넣거나 마감 종류를 바꿔 주세요');return}
   const W=owner(p);let job=v.job;if(job==='__new'){job=(v._jobNew||'').trim();if(!job){toast('새 직무 이름을 적어 주세요');return}if(!DB[W].jobs.includes(job)){DB[W].jobs.push(job);dirtyS(W)}}
   const b=snap(p),newStage=v.stage,oldStage=p.stage;
@@ -827,7 +829,7 @@ function addDlg(){
    ${a.resumed?`<div class="note info">작성하던 내용을 이어서 보여 드려요. <button class="link-btn" data-act="add-new">새로 시작 ›</button></div>`:''}
    <div class="tabs">${[['link','🔗 링크'],['cap','🖼 캡처'],['text','📄 붙여넣기']].map(t=>`<button class="${a.tab===t[0]?'on':''}" data-act="add-tab" data-v="${t[0]}">${t[1]}</button>`).join('')}</div>
    ${a.warn?`<div class="note">${esc(a.warn)}</div>`:''}
-   ${a.tab==='link'?`<div class="field"><label for="aLink">공고 주소</label><input id="aLink" type="url" placeholder="https://" value="${esc(a.link)}"></div>`:''}
+   ${a.tab==='link'?`<div class="field"><label for="aLink">공고 주소</label><input id="aLink" type="url" placeholder="https://" value="${esc(a.link)}"><span class="bad-url" data-bad="aLink" ${!a.link||okUrl(a.link)?'hidden':''}>잘못된 주소예요 · http:// 또는 https:// 로 시작하는 주소를 넣어 주세요</span></div>`:''}
    ${a.tab==='cap'?`<label class="drop" for="aImg"><b>공고 화면 캡처 올리기</b><span>여러 장 가능 · PC에선 붙여넣기(Ctrl+V)도 돼요</span><input id="aImg" type="file" accept="image/*" multiple hidden><span class="btn sm">이미지 고르기</span></label>
    <div class="paste-row"><button class="btn sm" data-act="paste-clip">📋 복사한 이미지 붙여넣기</button><div class="paste-box" contenteditable="true" role="textbox" aria-label="여기를 길게 눌러 붙여넣기" data-ph="또는 여기를 길게 눌러 [붙여넣기]"></div></div>
    <div class="inline img-url"><input type="url" id="aImgUrl" placeholder="이미지 주소 붙여넣기 (https://…)" aria-label="이미지 주소"><button class="btn sm" data-act="add-img-url">추가</button></div>
@@ -864,7 +866,7 @@ function formDlg(){
    ${v.dueKind==='확정'?`<div class="field ${miss('due')} ${F.focus?'focus':''}"><label for="fDue">마감 일시</label><input id="fDue" type="datetime-local" data-f="due" value="${esc(v.due)}">${rev?'<span class="note" style="margin-top:4px">마감 일시는 원문과 꼭 비교해 주세요. 시간(23:59, 18:00 등)을 잘못 읽는 경우가 있어요.</span>':''}</div>`:''}
    ${v.dueKind==='미확인'?`<div class="field ${F.focus?'focus':''}"><label for="fRecheck">재확인 날짜</label><input id="fRecheck" type="date" data-f="recheck" value="${esc(v.recheck)}"><span class="muted small">이 날짜에 "마감 재확인" 할 일이 자동으로 생겨요 (설정에서 켰을 때)</span></div>`:''}
    <div class="field ${miss('steps')}"><label for="fSteps">전형 절차 ( > 로 구분)</label><input id="fSteps" data-f="steps" value="${esc(v.steps)}"></div>
-   <div class="f2"><div class="field"><label for="fLink">공고 주소</label><input id="fLink" data-f="link" value="${esc(v.link)}" placeholder="https://"></div><div class="field"><label for="fRel">관련 자료 링크 (선택)</label><input id="fRel" data-f="relLink" value="${esc(v.relLink)}" placeholder="내 자소서 문서·폴더 등"></div></div>
+   <div class="f2"><div class="field"><label for="fLink">공고 주소</label><input id="fLink" data-f="link" value="${esc(v.link)}" placeholder="https://"><span class="bad-url" data-bad="fLink" ${!v.link||okUrl(v.link)?'hidden':''}>잘못된 주소예요 · http:// 또는 https:// 로 시작하는 주소를 넣어 주세요</span></div><div class="field"><label for="fRel">관련 자료 링크 (선택)</label><input id="fRel" data-f="relLink" value="${esc(v.relLink)}" placeholder="내 자소서 문서·폴더 등"><span class="bad-url" data-bad="fRel" ${!v.relLink||okUrl(v.relLink)?'hidden':''}>잘못된 주소예요 · http:// 또는 https:// 로 시작하는 주소를 넣어 주세요</span></div></div>
    ${m==='edit'?'':`<div class="field"><span class="lb">일정 ${v.events.length}</span>${v.events.map((e,i)=>`<div class="li"><span>${(KIND[e.k]||KIND.etc)[0]}</span><span class="num">${md(e.d)}</span><span class="grow">${esc(e.t)}</span><button class="x" data-act="rm-ev" data-i="${i}" aria-label="빼기">✕</button></div>`).join('')||'<span class="muted small">없음 · 저장 후 상세 화면에서 추가할 수 있어요</span>'}</div>`}
    <div class="field"><span class="lb">자소서 문항 ${v.qs.length} (원문 그대로 · 답변은 저장 후 상세 화면에서)</span>
     ${v.qs.map((q,i)=>`<div class="qe"><textarea data-q="${i}" data-qf="t" aria-label="문항 ${i+1} 원문">${esc(q.t)}</textarea><div class="qr">${i+1}번 · 글자 수 <input type="number" min="0" step="50" data-q="${i}" data-qf="n" value="${q.n}" aria-label="문항 ${i+1} 글자 수">자<button class="x" style="margin-left:auto" data-act="rm-q" data-i="${i}">빼기 ✕</button></div></div>`).join('')}
@@ -886,6 +888,7 @@ function closeDlg(){
 function saveForm(){
   syncForm();const F=S.form,v=F.v;
   if(!v.co.trim()){toast('회사 이름은 꼭 넣어 주세요');return}
+  const badUrl=[[v.link,'공고 주소'],[v.relLink,'관련 자료 링크']].find(([u])=>String(u||'').trim()&&!okUrl(u));if(badUrl){toast(badUrl[1]+'가 잘못된 주소예요');return}
   if(v.dueKind==='확정'&&!v.due){toast('마감 일시를 넣거나 마감 종류를 바꿔 주세요');return}
   let job=v.job;if(job==='__new'){job=(v._jobNew||'').trim();if(!job){toast('새 직무 이름을 적어 주세요');return}if(!DB[S.who].jobs.includes(job)){DB[S.who].jobs.push(job);dirtyS(S.who)}}
   const fields={co:v.co.trim(),short:(v.short||'').trim(),job,role:v.role.trim(),type:v.type,ind:v.ind,loc:v.loc.trim(),applyStart:v.applyStart,dueKind:v.dueKind,due:v.dueKind==='확정'?v.due.slice(0,16):null,recheck:v.dueKind==='미확인'?v.recheck:'',
@@ -931,6 +934,7 @@ async function runExtract(){
   readAddInputs();const A=S.add;
   const has=(A.tab==='link'&&A.link.trim())||(A.tab==='cap'&&(A.imgs.length||(A.imgUrls||[]).length))||(A.tab==='text'&&A.text.trim());
   if(!has){A.warn='링크, 캡처, 본문 중 하나를 넣어 주세요.';addDlg();return}
+  if(A.tab==='link'&&!okUrl(A.link)){A.warn='잘못된 주소예요. http:// 또는 https:// 로 시작하는 주소를 넣어 주세요.';addDlg();return}
   const input={jobs:DB[S.who].jobs,inds:DB[S.who].inds};
   if(A.link.trim())input.url=A.link.trim();
   if(A.text.trim())input.text=A.text.trim();
@@ -1120,6 +1124,7 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('input',e=>{
   const el=e.target;
+  if(el.id==='fLink'||el.id==='fRel'||el.id==='aLink'){const m=el.parentNode.querySelector('.bad-url');if(m)m.hidden=!el.value.trim()||okUrl(el.value)}
   if(el.id==='lQ'){S.lq=el.value;const r=listRows();$('#listBody').innerHTML=r.h;$('#listCnt').textContent=r.n+'건'}
   if(el.id==='bQ'){S.bQ=el.value;$('#boardBody').innerHTML=boardBody()}
   if(el.dataset&&el.dataset.qf==='a'&&S.ed&&el.closest('.sheet')){const q=S.ed.v.qs[+el.dataset.q];const c=document.querySelector('[data-cnt="'+el.dataset.q+'"]');const len=el.value.replace(/\n/g,'').length;if(c&&q){c.textContent=len.toLocaleString()+' / '+(q.n?Number(q.n).toLocaleString():'-')+'자';c.classList.toggle('over',!!q.n&&len>q.n)}}

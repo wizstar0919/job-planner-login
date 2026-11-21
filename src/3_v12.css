@@ -76,3 +76,7 @@ mark.on{background:var(--hl-on)}
 .acct-row>button{flex:1;min-width:0}
 .menu-list .ovl-tg{flex:none;white-space:nowrap;font-size:12px;font-weight:400;padding:8px 10px;color:var(--muted)}
 .dlg-b a.btn{align-self:flex-start;text-decoration:none}
+/* 달력 색 = 일정 종류 */
+.st-due{--col:var(--due);--soft:var(--due-soft)}
+.st-ann{--col:var(--st-write);--soft:var(--st-write-soft)}
+.bad-url{font-size:12px;color:var(--urgent)}
