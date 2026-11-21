@@ -378,6 +378,9 @@ mark.on{background:var(--hl-on)}
 .sh-menu button.cur b::after{content:' ✓';color:var(--accent)}
 .sh-menu .rm{color:var(--urgent);border-top:1px solid var(--line);border-radius:0 0 8px 8px;margin-top:4px}
 .sh-gen{display:flex;align-items:center;gap:10px;padding:8px 2px}
+.mem-st{font-size:12px;padding:2px 8px;border-radius:999px;background:var(--surface-2);white-space:nowrap}
+.mem-st.wait{color:#B7791F}.mem-st.no{color:var(--urgent)}.mem-st.ok{color:#2F855A}
+.sh-row .btn.sm{flex:none}
 
 /* ---- 실제 앱용 덮어쓰기 ---- */
 html,body{margin:0}
@@ -818,12 +821,12 @@ function cacheData(){/* 서버 형식으로 다시 만들어 기기에 보관 */
     P.tasks.forEach(x=>t.tasks.push({id:x.id||uid(),pid:'',t:x.t,due:x.due,done:Y(x.done),doneAt:x.doneAt||'',auto:Y(x.auto)}));raw[w]=t});
   LS.set('cache',{at:Date.now(),data:raw,meta:META,email:cfg.email});
 }
-function applyLoad(j){setData(j.data,j.meta);raw=j.data;LS.set('cache',{at:Date.now(),data:j.data,meta:META,email:cfg.email});if(j.usage){usage=j.usage;LS.set('usage',usage)}if(j.sheets)sheets=j.sheets;
+function applyLoad(j){setData(j.data,j.meta);if(META.status&&META.status!=='승인'){S.me=null;S.who=null;S.open=null;S.dlg=null}raw=j.data;LS.set('cache',{at:Date.now(),data:j.data,meta:META,email:cfg.email});if(j.usage){usage=j.usage;LS.set('usage',usage)}if(j.sheets)sheets=j.sheets;
   if(S.who&&!DB[S.who]){S.who=META.me;S.open=null}}
 async function refresh(quiet){
   if(queue.size||saving)return;
   try{const j=await api('loadAll');applyLoad(j);
-    if(S.me&&!S.dlg&&!S.editQ&&!(document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)))render()}
+    if(!S.me)render();else if(!S.dlg&&!S.editQ&&!(document.activeElement&&/INPUT|TEXTAREA/.test(document.activeElement.tagName)))render()}
   catch(e){if(!quiet&&e.code!=='auth')toast(errMsg(e))}
 }
 function errMsg(e){const c=e&&e.code;return {network:'인터넷 연결을 확인해 주세요',auth:'다시 로그인해 주세요',login_failed:'구글 로그인을 확인하지 못했어요. 다시 시도해 주세요',forbidden:'권한이 없어요',
@@ -909,6 +912,15 @@ const rowOpen=(id,cls,inner)=>`<div class="row click ${cls||''}" role="button" t
 
 /* ================= S0 시작 ================= */
 function startHTML(){
+  const st=cfg.sess&&!S.busy&&META.status&&META.status!=='승인'?META.status:'';
+  if(st)return `<div class="start" role="dialog" aria-label="가입 승인 대기"><div class="start-in">
+   <h1>구직 플래너<span class="test-tag">로그인 시험판</span></h1>
+   ${st==='거절'?`<b>이 계정은 사용 승인을 받지 못했어요</b><div class="muted">필요하면 관리자에게 문의해 주세요</div>`
+     :`<b>⏳ 가입 신청이 접수됐어요</b><div class="muted">관리자가 승인하면 바로 쓸 수 있어요.<br>승인을 받은 뒤 「다시 확인」을 눌러 주세요</div>
+     <button class="btn primary" data-act="recheck">다시 확인</button>`}
+   <span class="muted small">${esc(META.email||cfg.email)} 로 로그인함</span>
+   <button class="link-btn" data-act="logout">다른 계정으로 로그인</button>
+  </div></div>`;
   return `<div class="start" role="dialog" aria-label="로그인"><div class="start-in">
    <h1>구직 플래너<span class="test-tag">로그인 시험판</span></h1>
    <div class="muted">구글 계정으로 로그인하면 내 플래너가 열려요</div>
@@ -1387,6 +1399,7 @@ function setStage(p,st){
 }
 function settingsDlg(){const w=S.me;show(()=>dlgHead('설정 · '+esc(nm(w)))+`<div class="dlg-b" style="gap:0">
   <div class="set-row"><div><b>구글 계정</b><div class="muted small">${esc(META.email)}</div></div><button class="link-btn" data-act="logout">로그아웃</button></div>
+  ${META.admin?`<div class="set-row"><div><b>가입 승인</b><div class="muted small">${META.pending?`승인 기다리는 사람 ${META.pending}명`:'기다리는 사람이 없어요'}</div></div><button class="btn sm" data-act="members">회원 관리</button></div>`:''}
   <div class="set-row"><div><b>내 플래너 공유</b><div class="muted small">${shareSummary(w)}</div></div><button class="btn sm" data-act="share" data-v="${w}">공유 설정</button></div>
   <div class="set-row"><div><b>공고 정리</b><div class="muted small">${usage.hasKey===false?'API 키가 아직 연결되지 않았어요':`오늘 ${usage.used} / ${usage.limit}회 사용`}</div></div>${sheets[w]?`<a class="link-btn" href="${esc(sheets[w])}" target="_blank" rel="noopener">${esc(nm(w))} 시트 열기 ↗</a>`:''}</div>
   <div class="set-row" style="flex-direction:column;align-items:stretch;gap:8px"><b>내 직무 선택지</b><span class="muted small">공고 정리 때 이 목록으로 분류하고, 직무가 여러 개인 공고에선 여기 없는 직무를 빼고 보여 줘요</span><div class="jobs">${DB[w].jobs.map(j=>`<span>${esc(j)}${0?'':` <button class="x-btn" data-act="job-del" data-v="${esc(j)}" aria-label="${esc(j)} 빼기" title="목록에서 빼기">✕</button>`}</span>`).join('')}</div><div class="inline"><input type="text" id="jobNew" placeholder="직무 추가 (예: 손익관리)"><button class="btn sm" data-act="job-add">추가</button></div></div>
@@ -1402,7 +1415,25 @@ function acctMenu(){show(()=>dlgHead('계정 · 플래너')+`<div class="dlg-b">
   <div class="menu-list">${[S.me,...others()].filter(Boolean).map(w=>`<button class="${S.who===w?'cur':''}" data-act="view" data-v="${w}"><b>${esc(nm(w))}</b>&nbsp;<span class="muted small">${w===S.me?'내 플래너':esc(ROLE_NAME[roleOf(w)]||'')}</span>${S.who===w?' (보는 중)':''}${newComments(w).length&&(w===S.me||canEdit(w))?` · 새 댓글 ${newComments(w).length}`:''}</button>`).join('')}</div>
   ${others().length?'':'<span class="muted small">공유받은 플래너가 아직 없어요</span>'}
   ${canShare(S.who)?`<button class="btn sm" data-act="share" data-v="${S.who}">${S.who===S.me?'내 플래너':esc(nm(S.who))+' 플래너'} 공유 설정</button>`:''}
+  ${META.admin?`<button class="btn sm" data-act="members">회원 관리${META.pending?` · 승인 대기 ${META.pending}명`:''}</button>`:''}
   <button class="link-btn" data-act="logout" style="align-self:flex-start;color:var(--urgent)">로그아웃</button></div>`)}
+/* 회원 관리 (관리자만): 가입 신청 승인 · 거절 */
+const MST={'승인':'ok','대기':'wait','거절':'no'};
+async function membersDlg(){S.mem=null;
+  show(()=>{const L=S.mem;
+    const row=m=>`<div class="sh-row"><span class="av">${esc(String(m.name||m.email).slice(0,1).toUpperCase())}</span><span class="grow"><b>${esc(m.name||m.email.split('@')[0])}</b><span class="muted small">${esc(m.email)} · 가입 ${esc(m.joined||'-')}</span></span>
+      ${m.admin?'<span class="sh-role">관리자</span>':`<span class="mem-st ${MST[m.status]||''}">${esc(m.status)}</span>${m.status!=='승인'?`<button class="btn sm primary" data-act="mem-set" data-em="${esc(m.email)}" data-v="승인">승인</button>`:''}${m.status!=='거절'?`<button class="btn sm" data-act="mem-set" data-em="${esc(m.email)}" data-v="거절">${m.status==='승인'?'이용 중지':'거절'}</button>`:''}`}</div>`;
+    const ord={'대기':0,'승인':1,'거절':2};
+    return dlgHead('회원 관리')+`<div class="dlg-b">
+     <span class="muted small">처음 로그인한 사람은 '대기'로 들어와요. 승인하면 자기 플래너가 생기고 공고 자동 정리도 쓸 수 있어요. 공유받은 사람은 자동으로 승인돼요.</span>
+     <div class="sh-list">${L?L.slice().sort((a,b)=>(ord[a.status]-ord[b.status])||String(b.joined).localeCompare(String(a.joined))).map(row).join('')||'<span class="muted small">아직 아무도 없어요</span>':'<span class="muted small">불러오는 중…</span>'}</div></div>`});
+  try{const j=await api('members');S.mem=j.members;renderLayer()}catch(e){toast(errMsg(e))}}
+async function memSet(em,st){
+  try{const j=await api('approve',{email:em,status:st});S.mem=j.members;META.pending=j.members.filter(m=>m.status==='대기').length;renderLayer();toast(`${em} → ${st}`)}
+  catch(e){toast(errMsg(e))}}
+async function recheck(){S.busy=true;renderLayer();
+  try{const j=await api('loadAll');applyLoad(j);S.busy=false;if(META.status&&META.status!=='승인'){render();toast('아직 승인 대기 중이에요');return}enterMine()}
+  catch(e){S.busy=false;if(e.code!=='auth'){toast(errMsg(e));render()}}}
 function roleMenuH(pid,em,cur,can){
   return `<div class="sh-menu" role="menu">${can?`<span class="muted small" style="padding:4px 10px">사용자 사용 권한</span>`+ROLES.map(([k,n,d])=>`<button class="${cur===k?'cur':''}" data-act="sh-set" data-pid="${pid}" data-em="${esc(em)}" data-v="${k}"><b>${n}</b><span class="muted small">${d}</span></button>`).join(''):''}
    <button class="rm" data-act="sh-set" data-pid="${pid}" data-em="${esc(em)}" data-v="remove"><b>${em===META.email?'나가기':'🗑 제거'}</b>${em===META.email?'<span class="muted small">이 플래너를 더 이상 보지 않아요</span>':''}</button></div>`}
@@ -1632,6 +1663,9 @@ document.addEventListener('click',e=>{
     case 'sh-menu':S.shMenu=S.shMenu===t.dataset.em?null:t.dataset.em;renderLayer();break;
     case 'sh-set':setRole(t.dataset.pid,t.dataset.em,v);break;
     case 'logout':logout(false);break;
+    case 'recheck':recheck();break;
+    case 'members':membersDlg();break;
+    case 'mem-set':memSet(t.dataset.em,v);break;
     case 'nav':S.view=v;S.open=null;S.dlg=null;render();break;
     case 'open':S.open=id;S.ed=null;S.delAsk=false;S.editQ=null;S.flash=null;S.replyTo=null;{const q=find(id);if(q)markRead(q)}render();break;
     case 'open-c':S.open=id;S.flash=t.dataset.c;S.editQ=null;{const q=find(id);if(q)markRead(q)}render();break;

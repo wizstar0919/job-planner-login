@@ -34,8 +34,11 @@ const SCHEMA = {
 /* 관리 시트: 플래너 목록 · 공유 목록 */
 const REG = {
   planners: { tab: '플래너', cols: [['id','플래너 id'],['name','이름'],['owner','주인 이메일'],['sheet','데이터 시트 id'],['created','만든 날']] },
-  shares: { tab: '공유', cols: [['pid','플래너 id'],['email','이메일'],['role','권한'],['by','공유한 사람'],['at','공유한 날']] }
+  shares: { tab: '공유', cols: [['pid','플래너 id'],['email','이메일'],['role','권한'],['by','공유한 사람'],['at','공유한 날']] },
+  members: { tab: '회원', cols: [['email','이메일'],['name','이름'],['status','상태'],['joined','가입일'],['decided','처리일']] }
 };
+/* 가입 승인: 관리자(서버 주인)·플래너 주인·공유받은 사람은 자동 승인, 그 밖의 새 사람은 '대기' → 관리자가 승인. '거절'이면 전부 막힘 */
+const ST = { ok: '승인', wait: '대기', no: '거절' };
 
 /* ---------- 진입점 ---------- */
 function doGet() {
@@ -56,8 +59,10 @@ function doPost(e) {
       case 'batch': return out_(batchFor_(email, String(req.pid || ''), req.ops || []));
       case 'share': return out_(share_(email, String(req.pid || ''), req.emails || [], String(req.role || '')));
       case 'setRole': return out_(setRole_(email, String(req.pid || ''), String(req.email || ''), String(req.role || '')));
-      case 'extract': return out_(extract_(req.input || {}));
-      case 'fetchImg': return out_(fetchImg_(req.url));
+      case 'extract': return out_(approved_(email) ? extract_(req.input || {}) : { ok: false, error: 'forbidden' });
+      case 'fetchImg': return out_(approved_(email) ? fetchImg_(req.url) : { ok: false, error: 'forbidden' });
+      case 'members': return out_(email === admin_() ? { ok: true, members: members_(reg_()) } : { ok: false, error: 'forbidden' });
+      case 'approve': return out_(email === admin_() ? approve_(email, normEmail_(req.email), String(req.status || '')) : { ok: false, error: 'forbidden' });
       default: return out_({ ok: false, error: 'unknown_action' });
     }
   } catch (err) {
@@ -84,7 +89,8 @@ function ensureInit_() {
     if (!p.getProperty('SESSION_SECRET')) p.setProperty('SESSION_SECRET', Utilities.getUuid() + Utilities.getUuid());
     if (!p.getProperty('DAILY_LIMIT')) p.setProperty('DAILY_LIMIT', '30');
     const admin = normEmail_(Session.getEffectiveUser().getEmail());
-    const reg = { planners: [], shares: [] };
+    if (admin) p.setProperty('ADMIN_EMAIL', admin);
+    const reg = { planners: [], shares: [], members: [] };
     // 기존 앱 데이터 복사 (server/Local.gs 의 IMPORT_FROM. GitHub엔 올리지 않음). 기존 시트는 읽기만 함
     if (typeof IMPORT_FROM !== 'undefined' && IMPORT_FROM) {
       [['me', '민석', admin], ['gh', '건희', '']].forEach(([id, name, owner]) => {
@@ -126,11 +132,12 @@ function regBook_() {
 }
 function reg_() {
   const c = CacheService.getScriptCache().get('reg');
-  if (c) return JSON.parse(c);
+  if (c) { const r = JSON.parse(c); if (Object.keys(REG).every(t => Array.isArray(r[t]))) return r; }
   const b = regBook_(), r = {};
   Object.keys(REG).forEach(t => r[t] = readDef_(b, REG[t]));
   r.planners.forEach(x => x.owner = normEmail_(x.owner));
   r.shares.forEach(x => x.email = normEmail_(x.email));
+  r.members.forEach(x => { x.email = normEmail_(x.email); x.status = String(x.status || '').trim(); });
   CacheService.getScriptCache().put('reg', JSON.stringify(r), 120);
   return r;
 }
@@ -142,11 +149,60 @@ function saveReg_(r) {
 
 /* 이 사람이 이 플래너에 가진 권한 ('' = 없음) */
 function roleOf_(reg, email, pid) {
+  if (status_(reg, email) !== ST.ok) return '';
   const pl = reg.planners.find(x => x.id === pid);
   if (!pl) return '';
   if (pl.owner && pl.owner === email) return 'owner';
   const s = reg.shares.find(x => x.pid === pid && x.email === email);
   return s && RANK[s.role] ? s.role : '';
+}
+
+/* ---------- 가입 승인 ---------- */
+function admin_() {
+  const p = props_();
+  let a = p.getProperty('ADMIN_EMAIL');
+  if (!a) { a = normEmail_(Session.getEffectiveUser().getEmail()); if (a) p.setProperty('ADMIN_EMAIL', a); }
+  return a;
+}
+/* '승인' / '대기' / '거절' / '' (처음 보는 사람) */
+function status_(reg, email) {
+  if (!email) return '';
+  if (email === admin_()) return ST.ok;
+  const m = reg.members.find(x => x.email === email);
+  if (m && m.status === ST.no) return ST.no;
+  if ((m && m.status === ST.ok) || reg.planners.some(x => x.owner === email) || reg.shares.some(x => x.email === email)) return ST.ok;
+  return m ? ST.wait : '';
+}
+function approved_(email) { return status_(reg_(), email) === ST.ok; }
+function members_(reg) {
+  return reg.members.map(m => ({ email: m.email, name: m.name, status: status_(reg, m.email), joined: m.joined, decided: m.decided, admin: m.email === admin_() }));
+}
+/* 회원 목록에 기록 (처음 로그인할 때) */
+function addMember_(email, name, status) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    CacheService.getScriptCache().remove('reg');
+    const reg = reg_();
+    if (reg.members.some(x => x.email === email)) return;
+    reg.members.push({ email: email, name: String(name).slice(0, 30), status: status, joined: today_(), decided: status === ST.ok ? today_() : '' });
+    saveReg_(reg);
+  } finally { lock.releaseLock(); }
+}
+function approve_(admin, target, status) {
+  if (!isEmail_(target) || target === admin) return { ok: false, error: 'bad_email' };
+  if ([ST.ok, ST.no, ST.wait].indexOf(status) < 0) return { ok: false, error: 'bad_role' };
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    CacheService.getScriptCache().remove('reg');
+    const reg = reg_();
+    const m = reg.members.find(x => x.email === target);
+    if (m) { m.status = status; m.decided = today_(); }
+    else reg.members.push({ email: target, name: target.split('@')[0], status: status, joined: today_(), decided: today_() });
+    saveReg_(reg);
+    return { ok: true, members: members_(reg) };
+  } finally { lock.releaseLock(); }
 }
 
 /* ---------- 로그인 · 세션 ---------- */
@@ -157,9 +213,12 @@ function login_(idToken) {
   const info = JSON.parse(res.getContentText());
   const okIss = info.iss === 'accounts.google.com' || info.iss === 'https://accounts.google.com';
   if (info.aud !== CLIENT_ID || !okIss || String(info.email_verified) !== 'true' || Number(info.exp) * 1000 < Date.now()) return { ok: false, error: 'login_failed' };
-  const email = normEmail_(info.email);
-  ensurePlanner_(email, info.name || email.split('@')[0]);
-  return { ok: true, sess: makeSession_(email), email: email, name: info.name || '', picture: info.picture || '' };
+  const email = normEmail_(info.email), name = info.name || email.split('@')[0];
+  const reg = reg_();
+  let st = status_(reg, email);
+  if (!reg.members.some(x => x.email === email)) { addMember_(email, name, st === ST.ok ? ST.ok : ST.wait); if (!st) st = ST.wait; }
+  if (st === ST.ok) ensurePlanner_(email, name);
+  return { ok: true, sess: makeSession_(email), email: email, name: info.name || '', picture: info.picture || '', status: st };
 }
 function secret_() { return props_().getProperty('SESSION_SECRET'); }
 function b64_(bytes) { return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/, ''); }
@@ -199,7 +258,14 @@ function ensurePlanner_(email, name) {
 
 /* ---------- 불러오기 ---------- */
 function loadFor_(email) {
-  const reg = reg_();
+  let reg = reg_();
+  const st = status_(reg, email) || ST.wait;
+  if (st !== ST.ok) return { ok: true, meta: { email: email, me: '', names: {}, planners: [], status: st }, data: {}, usage: usage_(), sheets: {} };
+  if (!reg.planners.some(x => x.owner === email)) {
+    const m = reg.members.find(x => x.email === email);
+    ensurePlanner_(email, (m && m.name) || email.split('@')[0]);
+    reg = reg_();
+  }
   const acc = reg.planners.map(pl => ({ pl: pl, role: roleOf_(reg, email, pl.id) })).filter(x => x.role);
   const mine = acc.find(x => x.role === 'owner');
   const data = {}, sheets = {};
@@ -214,9 +280,10 @@ function loadFor_(email) {
   const names = {};
   reg.planners.forEach(pl => { if (people[pl.owner] || acc.some(x => x.pl.id === pl.id)) names[pl.id] = pl.name; });
   const meta = {
-    email: email, me: mine ? mine.pl.id : '', names: names,
+    email: email, me: mine ? mine.pl.id : '', names: names, status: st,
     planners: acc.map(x => plannerMeta_(reg, x.pl, x.role))
   };
+  if (email === admin_()) { meta.admin = true; meta.pending = members_(reg).filter(m => m.status === ST.wait).length; }
   return { ok: true, meta: meta, data: data, usage: usage_(), sheets: sheets };
 }
 function plannerMeta_(reg, pl, role) {

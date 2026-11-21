@@ -12,15 +12,23 @@ const reg={planners:[{id:'me',name:'민석',owner:ME},{id:'gh',name:'건희',own
   shares:[{pid:'gh',email:ME,role:'full'},{pid:'p3',email:ME,role:'comment'},{pid:'p4',email:ME,role:'read'}]};
 const RANK={read:1,comment:2,edit:3,full:4,owner:5};
 const roleOf=(e,pid)=>{const p=reg.planners.find(x=>x.id===pid);if(!p)return '';if(p.owner===e)return 'owner';const s=reg.shares.find(x=>x.pid===pid&&x.email===e);return s?s.role:''};
-const meta=e=>({email:e,me:(reg.planners.find(p=>p.owner===e)||{}).id||'',names:Object.fromEntries(reg.planners.map(p=>[p.id,p.name])),
+const NEW='new@gmail.com',SESS={S1:ME,S2:NEW};
+const members=[{email:ME,name:'강민석',status:'승인',joined:'2026-11-21'}];
+const stOf=e=>{if(e===ME)return '승인';const m=members.find(x=>x.email===e);if(m&&m.status==='거절')return '거절';if((m&&m.status==='승인')||reg.planners.some(p=>p.owner===e)||reg.shares.some(s=>s.email===e))return '승인';return m?'대기':''};
+const memList=()=>members.map(m=>Object.assign({},m,{status:stOf(m.email),admin:m.email===ME}));
+const meta=e=>({email:e,status:'승인',admin:e===ME||undefined,pending:e===ME?memList().filter(m=>m.status==='대기').length:undefined,me:(reg.planners.find(p=>p.owner===e)||{}).id||'',names:Object.fromEntries(reg.planners.map(p=>[p.id,p.name])),
   planners:reg.planners.filter(p=>roleOf(e,p.id)).map(p=>pm(e,p))});
 const pm=(e,p)=>({id:p.id,name:p.name,owner:p.owner,role:roleOf(e,p.id),shares:reg.shares.filter(s=>s.pid===p.id).map(s=>({email:s.email,role:s.role,name:''}))});
 const str=o=>{const r={};for(const k in o)r[k]=o[k]==null?'':String(o[k]);return r};
 let calls=[],denied=0;
 function server(body){const b=JSON.parse(body);calls.push(b.action);
- if(b.action==='login'){if(b.idToken!=='google-ok')return {ok:false,error:'login_failed'};return {ok:true,sess:'S1',email:ME,name:'강민석'}}
- if(b.sess!=='S1')return {ok:false,error:'auth'};
- const e=ME;
+ if(b.action==='login'){if(b.idToken==='google-new'){if(!members.some(m=>m.email===NEW))members.push({email:NEW,name:'새사람',status:'대기',joined:'2026-11-21'});return {ok:true,sess:'S2',email:NEW,status:stOf(NEW)}}
+   if(b.idToken!=='google-ok')return {ok:false,error:'login_failed'};return {ok:true,sess:'S1',email:ME,name:'강민석'}}
+ const e=SESS[b.sess];if(!e)return {ok:false,error:'auth'};
+ if(b.action==='members')return e===ME?{ok:true,members:memList()}:{ok:false,error:'forbidden'};
+ if(b.action==='approve'){if(e!==ME)return {ok:false,error:'forbidden'};const m=members.find(x=>x.email===b.email);m.status=b.status;return {ok:true,members:memList()}}
+ if(stOf(e)!=='승인'){if(b.action==='loadAll')return {ok:true,meta:{email:e,me:'',names:{},planners:[],status:stOf(e)},data:{},usage:{used:0,limit:30,hasKey:true},sheets:{}};denied++;return {ok:false,error:'forbidden'}}
+ if(!reg.planners.some(p=>p.owner===e)){reg.planners.push({id:'p5',name:'새사람',owner:e});store.p5=T()}
  if(b.action==='loadAll'){const m=meta(e);const data={};m.planners.forEach(p=>data[p.id]=JSON.parse(JSON.stringify(store[p.id])));return {ok:true,meta:m,data,usage:{used:0,limit:30,hasKey:true},sheets:{me:'https://docs.google.com/x'}}}
  if(b.action==='batch'){const r=roleOf(e,b.pid);if(!r){denied++;return {ok:false,error:'forbidden'}}
    if(RANK[r]<3&&!(RANK[r]>=2&&b.ops.every(o=>o.table==='comments'&&o.op==='upsert'))){denied++;return {ok:false,error:'forbidden'}}
@@ -102,5 +110,26 @@ const openCard=co=>{click('.nav-btn[data-v="board"]');const c=[...d.querySelecto
  // 세션 만료: 서버가 auth 를 돌려주면 로그인 화면으로
  dom=makeDom(Object.assign({},ls,{jpl_cfg:JSON.stringify(Object.assign(JSON.parse(ls.jpl_cfg),{sess:'expired'}))}));w=dom.window;d=w.document;runScripts();await sleep(80);
  ck('expired session → login screen',!!d.querySelector('.start')&&d.querySelector('#pwMsg').textContent.includes('만료'));
+ // 가입 승인: 새 사람이 로그인 → 대기 화면 → 관리자가 승인 → 다시 확인 → 자기 플래너
+ const deniedBefore=denied;
+ dom=makeDom();w=dom.window;d=w.document;runScripts();await sleep(30);
+ await gcb({credential:'google-new'});await sleep(50);
+ ck('new user → waiting screen',!!d.querySelector('.start [data-act="recheck"]')&&d.querySelector('.start').textContent.includes('가입 신청'));
+ click('[data-act="recheck"]');await sleep(50);ck('still waiting after recheck',!!d.querySelector('[data-act="recheck"]'));
+ const nd=dom;
+ dom=makeDom();w=dom.window;d=w.document;runScripts();await sleep(30);await gcb({credential:'google-ok'});await sleep(50);
+ click('#profBtn');ck('admin sees 회원 관리 with 1 pending',!!d.querySelector('.dlg [data-act="members"]')&&d.querySelector('.dlg [data-act="members"]').textContent.includes('1명'));
+ click('.dlg [data-act="members"]');await sleep(50);
+ ck('member list shows new person 대기',d.querySelector('.dlg').textContent.includes(NEW)&&d.querySelector('.dlg').textContent.includes('대기'));
+ click(`[data-act="mem-set"][data-em="${NEW}"][data-v="승인"]`);await sleep(50);
+ ck('approved',stOf(NEW)==='승인'&&d.querySelector('.dlg').textContent.includes('이용 중지'));
+ w=nd.window;d=w.document;click('[data-act="recheck"]');await sleep(80);
+ ck('new user enters own planner after approval',!d.querySelector('.start')&&d.querySelector('#profName').textContent==='새사람');
+ ck('new user cannot see others',w.document.querySelectorAll('#peekBtn:not([hidden])').length===0);
+ members.find(m=>m.email===NEW).status='거절';
+ const nls={};for(let i=0;i<w.localStorage.length;i++){const k=w.localStorage.key(i);nls[k]=w.localStorage.getItem(k)}
+ dom=makeDom(nls);w=dom.window;d=w.document;runScripts();await sleep(80);
+ ck('rejected user → blocked screen',!!d.querySelector('.start')&&d.querySelector('.start').textContent.includes('승인을 받지 못했어요'));
+ ck('no forbidden writes in approval flow',denied===deniedBefore);
 }catch(e){errs.push('TEST '+e.stack)}
  console.log(log.join('\n'));console.log('calls:',calls.join(','));console.log('ERRORS:',errs.length?errs:'none');process.exit(0)})();

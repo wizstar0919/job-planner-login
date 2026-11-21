@@ -72,3 +72,6 @@ mark.on{background:var(--hl-on)}
 .sh-menu button.cur b::after{content:' ✓';color:var(--accent)}
 .sh-menu .rm{color:var(--urgent);border-top:1px solid var(--line);border-radius:0 0 8px 8px;margin-top:4px}
 .sh-gen{display:flex;align-items:center;gap:10px;padding:8px 2px}
+.mem-st{font-size:12px;padding:2px 8px;border-radius:999px;background:var(--surface-2);white-space:nowrap}
+.mem-st.wait{color:#B7791F}.mem-st.no{color:var(--urgent)}.mem-st.ok{color:#2F855A}
+.sh-row .btn.sm{flex:none}
