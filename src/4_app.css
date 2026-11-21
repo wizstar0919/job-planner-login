@@ -1,0 +1,252 @@
+
+/* ---- 실제 앱용 덮어쓰기 ---- */
+html,body{margin:0}
+body{padding:0}
+.app{min-height:100vh;min-height:100dvh;background:var(--bg)}
+.top{border-radius:0;padding-top:max(10px,env(safe-area-inset-top,0px));padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:max(18px,env(safe-area-inset-right,0px))}
+.main{padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px))}
+.sync{font-size:12px;color:var(--muted);white-space:nowrap}
+.app.starting .top,.app.starting .shell,.app.starting .tabbar,.app.starting .fab{visibility:hidden}
+.pcard[disabled]{opacity:.6;cursor:wait}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+@container app (max-width:760px){
+  .top{padding-left:max(14px,env(safe-area-inset-left,0px));padding-right:max(14px,env(safe-area-inset-right,0px))}
+  .main{padding-left:max(14px,env(safe-area-inset-left,0px));padding-right:max(14px,env(safe-area-inset-right,0px))}
+  .sync{display:none}
+}
+/* 달력: 오늘 칸은 테두리만, 서류 마감은 눈에 띄게 */
+.cell.sel{background:transparent;box-shadow:inset 0 0 0 2px var(--accent)}
+.kind.k-due{background:var(--due-soft);color:var(--due)}
+.dd.urgent{background:var(--due-soft);color:var(--due)}
+/* 달력: 화면 높이에 맞춰 꽉 차게 (PC) */
+.cal.fill{display:flex;flex-direction:column;height:calc(100vh - 175px);height:calc(100dvh - 175px);min-height:600px}
+.cal.fill .grid7{flex:1;min-height:0}
+.cal.fill .cell{min-height:0;overflow:hidden;position:relative}
+.cal.fill .cell.week{min-height:0}
+.cal .ev{font-size:13px;line-height:1.5}
+.cal .cell .n{font-size:13px}
+@container app (max-width:760px){
+  .cal.fill{height:auto;min-height:0}
+  .cal.fill .grid7{grid-template-rows:auto!important}
+  .cal.fill .cell{min-height:64px}
+  .cal.fill .cell.week{min-height:150px}
+  .cal .ev{font-size:10px;line-height:1.3}
+  .cal .cell .n{font-size:12px}
+}
+/* 휴대폰 주 보기: 요일별 세로 목록 */
+.weeklist{display:flex;flex-direction:column}
+.wrow{display:grid;grid-template-columns:64px minmax(0,1fr);gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);align-items:start}
+.wrow:last-child{border-bottom:0}
+.wrow.today{background:var(--accent-soft)}
+.wday{display:flex;flex-direction:column;gap:2px;font-size:12.5px;color:var(--muted)}
+.wday b{font-size:15px;color:var(--fg)}
+.wrow .list{gap:6px}
+@container app (max-width:760px){
+  .cal .ev{font-size:11px;letter-spacing:-.03em}
+  .cal .ev .tx{display:inline}
+}
+.wrow.today{background:var(--surface-2);box-shadow:inset 3px 0 0 var(--accent)}
+@container app (max-width:760px){
+  .cal .grid7 .ev .ico{display:none}
+  .cal .grid7 .ev{padding:0 2px;font-size:11px}
+}
+/* 보드 8칸 (PC: 가로로 나란히, 좁으면 가로 스크롤) */
+.board{grid-template-columns:repeat(8,minmax(160px,1fr));min-width:1320px}
+.prog{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+/* 휴대폰 보드: 단계를 위에서 아래로 */
+@container app (max-width:760px){
+  .coltabs{display:none}
+  .board{grid-template-columns:minmax(0,1fr);min-width:0;gap:18px}
+  .col,.col:not(.active){display:flex;background:transparent;padding:0;min-height:0}
+  .col-h{display:flex;font-size:15px;padding:0 2px;border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:2px}
+  .col.empty-col{gap:0}
+  .col.empty-col .col-h{color:var(--muted);font-weight:500;font-size:13px;border-bottom:0;margin:0}
+  .col.empty-col .empty{display:none}
+}
+@container app (max-width:760px){.pc-only{display:none}}
+/* 공고 상세: 노션처럼 가운데 큰 창 */
+.sheet{top:4vh;bottom:auto;left:50%;right:auto;transform:translateX(-50%);width:min(960px,94vw);height:92vh;height:92dvh;border-radius:16px;box-shadow:0 24px 64px var(--shadow)}
+.sheet-h{border-radius:16px 16px 0 0}
+.sheet-b{padding:8px 32px 40px}
+.sheet .sum .co{font-size:24px}
+.sheet .q p{font-size:15px}
+.sheet .ans{font-size:15px;padding:12px 16px}
+@container app (max-width:760px){
+  .sheet{top:0;left:0;transform:none;width:100%;height:100%;border-radius:0}
+  .sheet-h{border-radius:0}
+  .sheet-b{padding:4px 16px 24px}
+}
+/* 형광펜 댓글 말풍선 */
+mark[data-cs]{cursor:pointer}
+.cbar{font-size:12.5px;color:var(--muted)}
+.cpop{position:fixed;z-index:58;max-height:min(60vh,520px);overflow-y:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 36px var(--shadow);padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.cpop[hidden]{display:none}
+.cpop .cmt{border:0;border-bottom:1px solid var(--line);border-radius:0;padding:6px 2px 8px;background:transparent}
+.cpop .cmt:last-child{border-bottom:0}
+.cpop .q-quote{display:none}
+.cpop-h{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--muted)}
+.cpop.sheetpop{left:0;right:0;bottom:0;top:auto;width:auto;border-radius:16px 16px 0 0;max-height:60vh;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}
+[hidden]{display:none!important}
+/* 달력: 단계 색 */
+.cal .ev[class*="st-"]{color:var(--col);background:var(--soft);border-radius:4px;padding:0 4px;margin-bottom:1px}
+.st-start{--col:var(--st-start);--soft:var(--st-start-soft)}
+.st-write{--col:var(--st-write);--soft:var(--st-write-soft)}
+.st-sub{--col:var(--st-sub);--soft:var(--st-sub-soft)}
+.st-test{--col:var(--st-test);--soft:var(--st-test-soft)}
+.st-int{--col:var(--st-int);--soft:var(--st-int-soft)}
+.st-end{--col:var(--st-end);--soft:var(--st-end-soft)}
+.cal .ev.k-due{font-weight:700}
+.cal .ev.st-end{opacity:.75}
+.cal .ev.p{opacity:.5}
+.legend .lg{display:inline-flex;align-items:center;gap:5px;color:var(--col);font-weight:600}
+.legend .lg i{width:10px;height:10px;border-radius:3px;background:var(--col);display:inline-block}
+.wd.sun{color:var(--urgent)}
+.wd.sat{color:var(--st-sub)}
+.cal-side{display:flex;flex-direction:column;gap:18px;min-width:0}
+
+/* 달력 칸 글자 */
+.cal .ev .tx b{font-weight:700}
+.cal .ev .ty{opacity:.8;font-weight:500}
+/* 잘린 글자: 끝을 흐리게 (말줄임표 대신) */
+.fade{text-overflow:clip!important;-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}
+/* 날짜 없는 공고: 작게 */
+.minis{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.mini-row{padding:7px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden}
+.mini-row:last-child{border-bottom:0}
+.mini-row:hover{background:var(--surface-2)}
+/* 왼쪽 메뉴 접기 */
+.side-tg{flex:none}
+.app.side-off .side{display:none}
+.app.side-off .shell{grid-template-columns:minmax(0,1fr)}
+.app.side-off .fab{display:grid;place-items:center;position:fixed;right:28px;bottom:28px;width:56px;height:56px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-fg);z-index:31;box-shadow:0 6px 16px var(--shadow)}
+.app.side-off .fab svg{width:24px;height:24px}
+@container app (max-width:760px){.side-tg{display:none}}
+
+/* 오른쪽 칸: 달력 높이에 맞추고, 날짜 없는 공고는 맨 아래에 고정 */
+.cal-side{height:calc(100vh - 175px);height:calc(100dvh - 175px);min-height:600px;overflow-y:auto}
+.cal-side .sec.nod{margin-top:auto;position:sticky;bottom:0;background:var(--bg);padding-top:8px}
+@container app (max-width:760px){.cal-side{height:auto;min-height:0;overflow:visible}.cal-side .sec.nod{position:static;margin-top:0}}
+
+/* ===== 정리: 차분하게 ===== */
+/* 달력 칸 폭에 따라 내용 줄이기 (좁으면 회사명만) */
+.cal{container:cal/inline-size}
+@container cal (max-width:1100px){.cal .ev .ty,.cal .ev .jb{display:none}}
+/* 오른쪽 칸: 노트북에선 조금 좁게 */
+@container app (max-width:1500px){.cal-wrap{grid-template-columns:minmax(0,1fr) 260px}}
+/* B. 오늘: 날짜 숫자만 강조, 고른 날은 은은한 바탕 */
+.cell.sel{box-shadow:none;background:var(--surface-2)}
+/* C. 오른쪽: 항목마다 상자 대신 묶음(섹션)마다 상자 하나 */
+.cal-side .list,.cal-side .minis{gap:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:4px}
+.cal-side .row{border:0;border-radius:8px;background:transparent;padding:8px 8px}
+.cal-side .row.click:hover{background:var(--surface-2)}
+.cal-side .empty{border:0;padding:6px 8px;font-size:12.5px}
+.cal-side .dd{min-width:44px;font-size:12px;padding:2px 6px}
+.cal-side .mini-row{padding:6px 8px;border-bottom:0;border-radius:6px}
+
+/* PC에서 메뉴를 접으면: 동그라미 대신 위쪽 바에 + 공고 추가 */
+.top-add{display:none;white-space:nowrap}
+.app.side-off .top-add{display:inline-block}
+.app.side-off .fab{display:none}
+.app.ro .top-add{display:none}
+@container app (max-width:760px){.app.side-off .top-add{display:none}.app.side-off .fab,.fab{display:grid}}
+
+/* 기록: 직무·업권 눌러서 고르기 */
+.bar.pick{cursor:pointer;border-radius:6px;padding:2px 4px;margin:0 -4px}
+.bar.pick:hover{background:var(--surface-2)}
+.bar.dim{opacity:.35}
+.bar.on span.oneline{font-weight:700;color:var(--fg)}
+.bar.on .fill{background:var(--accent)}
+.fchips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px}
+.fchip{border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:3px 10px;font-size:12.5px;font-weight:600}
+
+/* 달력: 공고 막대를 누르면 바로 상세, 빈 곳은 날짜 선택 */
+.cal .ev.go{cursor:pointer}
+.cal .ev.go:hover{filter:brightness(1.25);outline:1px solid var(--col);outline-offset:-1px}
+
+/* 달력 굵기 통일: [유형]만 굵게, 회사·직무는 보통 (마감 일정도 같게) */
+.cal .ev,.cal .ev.k-due{font-weight:400}
+.cal .ev .jb,.cal .ev .tx b{font-weight:400}
+.cal .ev .ty{font-weight:700;opacity:1}
+
+/* 기록: 전체 공고 표 */
+.ltools{flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.ltools .search{max-width:240px}
+.ltable td{vertical-align:top}
+.ltable td .sub{font-size:12px;color:var(--muted);max-width:340px}
+.ltable tbody tr{cursor:pointer}
+.ltable tbody tr:hover{background:var(--surface-2)}
+.th-sort{border:0;background:transparent;color:inherit;font:inherit;padding:0;cursor:pointer}
+.th-sort.on{color:var(--fg);font-weight:600}
+.stg{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;white-space:nowrap}
+@container app (max-width:760px){.ltable .hide-n{display:none}.ltools .search{max-width:none;flex:1 1 100%}}
+/* 분석 → 기록 이어 주기 */
+.stat.link{cursor:pointer}
+.stat.link:hover{border-color:var(--accent)}
+.stat .go{float:right;color:var(--accent);font-size:12px}
+
+/* 휴대폰: 메뉴 접힘 상태여도 + 버튼은 아래 메뉴 위에 */
+@container app (max-width:760px){.app.side-off .fab{right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(78px + env(safe-area-inset-bottom,0px));width:54px;height:54px}}
+@container app (max-width:760px){table.ltable{min-width:0}.ltable td,.ltable th{padding-left:8px;padding-right:8px}}
+@container app (max-width:760px){.ltable td .sub{white-space:normal;max-width:none}.ltable td.num{white-space:nowrap}}
+
+/* 분석: 깔때기 · 월별 추이 · 분류별 통과율 */
+.stats.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+@container app (max-width:760px){.stats.two{grid-template-columns:minmax(0,1fr)}}
+.funnel{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.fstep{display:grid;grid-template-columns:70px minmax(0,1fr) 30px 40px;align-items:center;gap:8px;font-size:13px}
+.fstep .track{display:block;height:14px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+.fstep .fill{display:block;height:100%;background:var(--accent);border-radius:0 4px 4px 0}
+.fstep .num{text-align:right;font-family:var(--f-num);font-weight:600}
+.fstep .fp{text-align:right;font-size:12px}
+.months{display:flex;align-items:stretch;gap:3px;height:160px;margin-top:10px}
+.mcol{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;border-radius:6px;padding:2px 0}
+.mcol .mv{font-size:11px;font-family:var(--f-num);color:var(--muted);height:14px}
+.mcol .mbox{flex:1 1 0;width:100%;position:relative;min-height:0}
+.mcol .mbar{position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:min(24px,70%);background:var(--accent-soft);border-radius:4px 4px 0 0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
+.mcol .mok{display:block;width:100%;background:var(--accent)}
+.mcol .ml{font-size:10.5px;color:var(--muted);white-space:nowrap}
+.mlegend{display:flex;gap:14px;margin-top:8px;color:var(--muted)}
+.mlegend .mlg{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.mlg.a{background:var(--accent-soft);border:1px solid var(--accent)}
+.mlg.b{background:var(--accent)}
+.rate{display:flex;align-items:center;gap:8px}
+.rate .track{display:block;flex:1;max-width:180px;height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+.rate .fill{display:block;height:100%;background:var(--accent);border-radius:0 4px 4px 0}
+.rate .num{min-width:36px;text-align:right;font-family:var(--f-num)}
+.rate.few{opacity:.45}
+@container app (max-width:760px){.rtable .hide-n{display:none}table.rtable{min-width:0}.rate .muted{display:none}}
+.mcol .mbar,.mlg.a{background:color-mix(in srgb,var(--accent) 32%,transparent)}
+.mlg.a{border:0}
+
+/* 분석 조건 바 (아래 고정) */
+.cbar{position:sticky;bottom:12px;z-index:20;margin-top:16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:10px 12px;box-shadow:0 8px 24px var(--shadow)}
+.cbar.enter{animation:cbarUp .22s ease-out}
+@keyframes cbarUp{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
+.cb-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
+.cb-btns{display:flex;gap:6px;flex:none}
+.cb-n{margin-left:4px}
+@container app (max-width:760px){.cbar{bottom:calc(70px + env(safe-area-inset-bottom,0px))}.app.has-cbar .fab{bottom:calc(150px + env(safe-area-inset-bottom,0px))}}
+@media (prefers-reduced-motion:reduce){.cbar.enter{animation:none}}
+@container app (max-width:760px){.app.has-cbar .fab,.app.side-off.has-cbar .fab{display:none}}
+
+/* 자소서: 줄바꿈마다 문단 간격 */
+.ans .pg{display:block;height:.55em}
+
+/* 공고 추가 · 캡처: 휴대폰 붙여넣기, 이미지 주소 */
+.paste-row{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+.paste-box{flex:1 1 180px;min-height:36px;border:1px dashed var(--line);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--muted);outline:none;overflow:hidden;white-space:nowrap}
+.paste-box:empty::before{content:attr(data-ph)}
+.paste-box:focus{border-color:var(--accent)}
+@media (hover:hover) and (pointer:fine){.paste-box{display:none}}
+.img-url{margin:10px 0}
+.img-url input{flex:1}
+.thumbs img.broken{opacity:.35;outline:1px dashed var(--due)}
+
+/* 공고 추가: 직무가 여러 개일 때 고르기 */
+.pos-list{display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow-y:auto;margin:10px 0}
+.pos{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 12px;cursor:pointer;color:var(--fg)}
+.pos:hover{border-color:var(--accent);background:var(--surface-2)}
+.pos.rec{border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
+.jobs .x-btn{border:0;background:transparent;color:var(--muted);cursor:pointer;padding:0 2px;font-size:11px}
+.jobs .x-btn:hover{color:var(--due)}
