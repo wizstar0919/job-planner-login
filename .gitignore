@@ -3,3 +3,7 @@
 *.local.*
 node_modules/
 server/Local.gs
+preview.html
+.codex-tmp/
+codex-review.md
+package-lock.json
